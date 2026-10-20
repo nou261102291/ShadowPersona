@@ -7,6 +7,7 @@ import { createClient } from './lib/supabase/client';
 import { isSupabaseConfigured } from './lib/supabase/config';
 import OptimizationSuite from './components/OptimizationSuite';
 import PromoterROIConsole from './components/PromoterROIConsole';
+import PromoterROIUnavailable from './components/PromoterROIUnavailable';
 import { simulationResponseSchema } from './types/shadowpersona';
 import { promoterROIDataSchema } from './types/shadowpersona';
 import type { ComparativeAnalysis, PromoterLocation, SimulationResponse, TargetVertical } from './types/shadowpersona';
@@ -39,6 +40,13 @@ function getFileError(file: File): string | null {
   if (file.size > MAX_FILE_SIZE) return 'Choose a file smaller than 10 MB.';
   if (!fileIsSupported(file)) return 'Supported formats are PDF, PNG, and JPG.';
   return null;
+}
+
+function getAnalysisErrorMessage(cause: unknown): string {
+  if (cause instanceof TypeError && /failed to fetch|network request failed|load failed/i.test(cause.message)) {
+    return 'The analysis service could not be reached. Check your connection and retry; if running locally, make sure the app server is running.';
+  }
+  return cause instanceof Error ? cause.message : 'The analysis was interrupted by an unexpected error.';
 }
 
 function getDemoSessionId(): string {
@@ -1016,7 +1024,7 @@ export default function App() {
         if (!response.ok || !parsedReplay.success) throw new Error('The offline demo result could not be loaded.');
         setResult(parsedReplay.data);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'The analysis was interrupted by an unexpected error.');
+        setError(getAnalysisErrorMessage(cause));
       } finally {
         setStage('idle');
       }
@@ -1129,7 +1137,7 @@ export default function App() {
       setResult(parsedResult.data);
       completed = true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The analysis was interrupted by an unexpected error.');
+      setError(getAnalysisErrorMessage(cause));
     } finally {
       if (uploadedPath) {
         try {
@@ -1232,6 +1240,11 @@ export default function App() {
             onLocationChange={refreshPromoterROI}
           />
         </div>
+      ) : result?.mode === 'fixture' ? (
+        <PromoterROIUnavailable
+          canGenerate={Boolean(health?.qloo && health.gemini)}
+          onGenerate={refreshPromoterROI}
+        />
       ) : result?.promoterROIStatus && result.promoterROIStatus !== 'complete' ? (
         <div role="status" className="border-t border-[#1F222F] bg-[#101116] p-4 text-center text-xs text-amber-200">
           Promoter ROI data could not be generated for this analysis. The cultural evidence and report above remain available.
