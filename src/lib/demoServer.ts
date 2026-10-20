@@ -21,7 +21,10 @@ export async function readDemoFile(id: string): Promise<{ name: string; bytes: B
   const scenario = findDemoScenario(id);
   if (!scenario?.file) return null;
   try {
-    return { name: scenario.file, bytes: await fs.readFile(path.join(demoDir, scenario.file)) };
+    const bytes = await fs.readFile(path.join(demoDir, scenario.file));
+    // A Git LFS pointer or truncated checkout is not a PDF; fail loudly instead of uploading junk.
+    if (bytes.subarray(0, 4).toString('latin1') !== '%PDF') return null;
+    return { name: scenario.file, bytes };
   } catch {
     return null;
   }

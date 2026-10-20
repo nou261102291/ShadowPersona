@@ -13,7 +13,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "demo:purge": "node scripts/purge-demo-cache.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

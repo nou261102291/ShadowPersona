@@ -5,6 +5,7 @@ import { DEMO_SCENARIOS, type DemoScenario } from './lib/demoScenarios';
 import { canReplayDemo, getReadiness, type HealthStatus, type ReadinessItem } from './lib/readiness';
 import { createClient } from './lib/supabase/client';
 import { isSupabaseConfigured } from './lib/supabase/config';
+import OptimizationSuite from './components/OptimizationSuite';
 import { simulationResponseSchema } from './types/shadowpersona';
 import type { ComparativeAnalysis, SimulationResponse, TargetVertical } from './types/shadowpersona';
 
@@ -718,7 +719,7 @@ function ComparisonView({ comparison }: { comparison: ComparativeAnalysis }) {
       <h3 className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">
         Historical comparison · {ca.historicalBenchmarkEventName}
       </h3>
-      <div className="mt-2.5 grid grid-cols-3 gap-2">
+      <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {stats.map(([label, value]) => (
           <div key={label} className="rounded-lg border border-white/[0.07] bg-[#14161c] p-2 text-center">
             <p className="text-[11px] font-semibold text-slate-100">{value}</p>
@@ -726,7 +727,8 @@ function ComparisonView({ comparison }: { comparison: ComparativeAnalysis }) {
           </div>
         ))}
       </div>
-      <table className="mt-3 w-full text-left text-[10px]">
+      <div className="mt-3 overflow-x-auto">
+      <table className="w-full min-w-[320px] text-left text-[10px]">
         <thead className="text-[9px] text-slate-500">
           <tr>
             <th className="py-1 font-medium">Metric</th>
@@ -744,6 +746,7 @@ function ComparisonView({ comparison }: { comparison: ComparativeAnalysis }) {
           ))}
         </tbody>
       </table>
+      </div>
       <p className="mt-1 text-[8px] text-slate-600">Values marked (est.) are extrapolated, not sourced.</p>
       <div className="mt-3 space-y-2.5 text-[10px] leading-relaxed text-slate-300">
         <p>
@@ -832,7 +835,24 @@ function ReportPanel({ result, error }: { result: SimulationResponse | null; err
             <MarkdownReportView content={result.report} />
           </div>
 
-          {result.comparison && <ComparisonView comparison={result.comparison} />}
+          {result.comparison ? (
+            <ComparisonView comparison={result.comparison} />
+          ) : (
+            result.comparisonStatus &&
+            result.comparisonStatus !== 'complete' && (
+              <p className="mt-6 border-t border-white/[0.07] pt-4 text-[10px] text-slate-500">
+                {result.comparisonStatus === 'skipped'
+                  ? 'Historical comparison was skipped because web research (Tavily) is not configured.'
+                  : 'Historical comparison could not be generated for this run. The cultural-fit report above is unaffected.'}
+              </p>
+            )
+          )}
+
+          {result.optimization && (
+            <div className="mt-6 border-t border-white/[0.07] pt-4">
+              <OptimizationSuite optimizationData={result.optimization} />
+            </div>
+          )}
 
           {result.sources.length > 0 && (
             <div className="mt-6 border-t border-white/[0.07] pt-4">

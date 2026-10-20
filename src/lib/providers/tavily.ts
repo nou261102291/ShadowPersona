@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ResearchSource } from '@/types/shadowpersona';
+import { httpUrlSchema, type CompetitiveBenchmark, type ResearchSource } from '@/types/shadowpersona';
 import { fetchWithBackoff, requireEnv } from './http';
 
 const extractSchema = z.object({
@@ -33,9 +33,7 @@ function compactQuantitative(text: string): string {
     .join(' ');
 }
 
-export async function searchHistoricalContext(
-  query: string,
-): Promise<{ sources: ResearchSource[]; compacted: string }> {
+async function searchOnce(query: string): Promise<HistoricalSearch> {
   const response = await fetchWithBackoff('Tavily', 'https://api.tavily.com/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${requireEnv('TAVILY_API_KEY')}` },
@@ -43,17 +41,38 @@ export async function searchHistoricalContext(
   });
   const results = searchSchema.parse(await response.json()).results;
   const sources: ResearchSource[] = [];
+  const benchmarks: CompetitiveBenchmark[] = [];
   const blocks: string[] = [];
   for (const result of results) {
     const compacted = compactQuantitative(result.content);
     if (!compacted) continue;
-    try {
-      new URL(result.url);
-    } catch {
-      continue;
-    }
-    sources.push({ title: result.title || result.url, url: result.url });
-    blocks.push(`[${result.title || result.url}] ${compacted}`);
+    if (!httpUrlSchema.safeParse(result.url).success) continue;
+    const title = result.title || result.url;
+    sources.push({ title, url: result.url });
+    benchmarks.push({ title, url: result.url, snippet: compacted.slice(0, 320) });
+    blocks.push(`[${title}] ${compacted}`);
   }
-  return { sources, compacted: blocks.join('\n').slice(0, 6000) };
+  return { sources, benchmarks, compacted: blocks.join('\n').slice(0, 6000) };
+}
+
+interface HistoricalSearch {
+  sources: ResearchSource[];
+  benchmarks: CompetitiveBenchmark[];
+  compacted: string;
+}
+
+// Widens the query step by step until a search yields quantitative text.
+export async function searchHistoricalContext(tags: string[]): Promise<HistoricalSearch & { query: string | null }> {
+  const metrics = 'ticket sales attendance revenue sponsorship';
+  const queries = [
+    `${tags.slice(0, 3).join(' ')} album launch event ${metrics}`,
+    `${tags[0] ?? 'music'} concert ${metrics}`,
+    `live music concert ${metrics} benchmark`,
+  ].filter((query, index, all) => all.indexOf(query) === index);
+
+  for (const query of queries) {
+    const found = await searchOnce(query);
+    if (found.compacted) return { ...found, query };
+  }
+  return { sources: [], benchmarks: [], compacted: '', query: null };
 }

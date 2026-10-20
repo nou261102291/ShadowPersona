@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { comparativeAnalysisSchema, type ComparativeAnalysis, type QlooEvidence } from '@/types/shadowpersona';
+import {
+  comparativeAnalysisSchema,
+  geminiOptimizationSchema,
+  type ComparativeAnalysis,
+  type QlooEvidence,
+} from '@/types/shadowpersona';
 import { COMPARATIVE_ANALYSIS_PROMPT } from '@/lib/prompts/comparativeAnalysis';
 import { fetchWithBackoff, ProviderError, requireEnv } from './http';
 
@@ -81,6 +86,34 @@ ${input.briefText ? `<untrusted>${input.briefText}</untrusted>` : ''}
 <untrusted>${input.historicalContext || 'No quantitative historical data was found. Use conservative estimates and mark them (est.).'}</untrusted>
 </CompactedHistoricalContext>`;
   return generateJson([{ text: prompt }], comparativeAnalysisSchema);
+}
+
+export async function optimizeEvent(input: {
+  tags: string[];
+  evidence: QlooEvidence[];
+  historicalContext: string;
+}): Promise<z.infer<typeof geminiOptimizationSchema>> {
+  const prompt = `You are an event-operations optimization analyst. ${untrustedNotice}
+Using ONLY the Qloo evidence and the historical context below, recommend pre-event and post-event optimizations for a music launch.
+Rules:
+- Ticket prices are modelled recommendations in USD, not sourced facts. Never present them as measured benchmarks.
+- If the historical context is empty, base recommendations on the Qloo evidence alone and state in geminiRationale that no historical benchmarks were available.
+- marketingChannelMix allocationPct values must sum to 100.
+- estimatedLtvMultiplier is a conservative modelled multiplier (e.g. 1.8), not a measured figure.
+- Do not invent artists, venues, brands or sources. Partnership suggestions must be categories or brand types tied to the Qloo evidence.
+- geminiRationale: plain text, under 200 words, explaining the reasoning and its uncertainty.
+Return JSON: {
+  "preEventOptimization": {"recommendedTicketPricingTiers": [{"name": string, "price": number, "note": string}], "marketingChannelMix": [{"channel": string, "allocationPct": number}], "primaryOperationalRisk": string},
+  "postEventOptimization": {"audienceRetentionStrategy": string, "estimatedLtvMultiplier": number, "downstreamBrandPartnershipSuggestions": string[]},
+  "geminiRationale": string
+}
+
+Descriptors: ${JSON.stringify(input.tags)}
+Qloo evidence: ${JSON.stringify(input.evidence)}
+<CompactedHistoricalContext>
+<untrusted>${input.historicalContext || 'none'}</untrusted>
+</CompactedHistoricalContext>`;
+  return generateJson([{ text: prompt }], geminiOptimizationSchema);
 }
 
 export async function writeReport(input: {
