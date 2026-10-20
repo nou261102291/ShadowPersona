@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { QlooEvidence } from '@/types/shadowpersona';
+import { comparativeAnalysisSchema, type ComparativeAnalysis, type QlooEvidence } from '@/types/shadowpersona';
+import { COMPARATIVE_ANALYSIS_PROMPT } from '@/lib/prompts/comparativeAnalysis';
 import { fetchWithBackoff, ProviderError, requireEnv } from './http';
 
 type Part = { text: string } | { inlineData: { mimeType: string; data: string } };
@@ -63,6 +64,23 @@ export async function extractTags(input: {
   if (input.webText) parts.push({ text: `<untrusted>${input.webText}</untrusted>` });
   const result = await generateJson(parts, z.object({ tags: z.array(z.string().trim().min(1).max(80)).max(25) }));
   return result.tags;
+}
+
+export async function compareEvent(input: {
+  tags: string[];
+  evidence: QlooEvidence[];
+  historicalContext: string;
+  briefText?: string;
+}): Promise<ComparativeAnalysis> {
+  const prompt = `${COMPARATIVE_ANALYSIS_PROMPT}
+
+Target descriptors: ${JSON.stringify(input.tags)}
+Qloo graph evidence: ${JSON.stringify(input.evidence)}
+${input.briefText ? `<untrusted>${input.briefText}</untrusted>` : ''}
+<CompactedHistoricalContext>
+<untrusted>${input.historicalContext || 'No quantitative historical data was found. Use conservative estimates and mark them (est.).'}</untrusted>
+</CompactedHistoricalContext>`;
+  return generateJson([{ text: prompt }], comparativeAnalysisSchema);
 }
 
 export async function writeReport(input: {

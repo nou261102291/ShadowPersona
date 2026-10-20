@@ -6,7 +6,7 @@ import { canReplayDemo, getReadiness, type HealthStatus, type ReadinessItem } fr
 import { createClient } from './lib/supabase/client';
 import { isSupabaseConfigured } from './lib/supabase/config';
 import { simulationResponseSchema } from './types/shadowpersona';
-import type { SimulationResponse, TargetVertical } from './types/shadowpersona';
+import type { ComparativeAnalysis, SimulationResponse, TargetVertical } from './types/shadowpersona';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg']);
@@ -705,6 +705,65 @@ function EvidencePanel({ result }: { result: SimulationResponse | null }) {
   );
 }
 
+function ComparisonView({ comparison }: { comparison: ComparativeAnalysis }) {
+  const { comparativeAnalysis: ca, informedStrategicAnalysis: sa } = comparison;
+  const { varianceMetrics: vm } = ca;
+  const stats = [
+    ['Affinity shift', `${vm.audienceAffinityShift > 0 ? '+' : ''}${vm.audienceAffinityShift.toFixed(2)}`],
+    ['Yield differential', vm.projectedYieldDifferential],
+    ['Risk mitigation', `${vm.riskFactorMitigationIndex}/100`],
+  ];
+  return (
+    <div className="mt-6 border-t border-white/[0.07] pt-4">
+      <h3 className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">
+        Historical comparison · {ca.historicalBenchmarkEventName}
+      </h3>
+      <div className="mt-2.5 grid grid-cols-3 gap-2">
+        {stats.map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-white/[0.07] bg-[#14161c] p-2 text-center">
+            <p className="text-[11px] font-semibold text-slate-100">{value}</p>
+            <p className="text-[8px] text-slate-500">{label}</p>
+          </div>
+        ))}
+      </div>
+      <table className="mt-3 w-full text-left text-[10px]">
+        <thead className="text-[9px] text-slate-500">
+          <tr>
+            <th className="py-1 font-medium">Metric</th>
+            <th className="py-1 font-medium">Target (projected)</th>
+            <th className="py-1 font-medium">Benchmark (actual)</th>
+          </tr>
+        </thead>
+        <tbody className="text-slate-300">
+          {ca.sideBySideComparisonTable.map((row) => (
+            <tr key={row.metricTracked} className="border-t border-white/[0.05]">
+              <td className="py-1.5 pr-2">{row.metricTracked}</td>
+              <td className="py-1.5 pr-2">{row.currentTargetProjected}</td>
+              <td className="py-1.5">{row.historicalBenchmarkActual}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[8px] text-slate-600">Values marked (est.) are extrapolated, not sourced.</p>
+      <div className="mt-3 space-y-2.5 text-[10px] leading-relaxed text-slate-300">
+        <p>
+          <span className="font-semibold text-rose-300">Core vulnerability: </span>
+          {sa.coreVulnerabilityVerdict}
+        </p>
+        <p>
+          <span className="font-semibold text-emerald-300">Arbitrage opportunity: </span>
+          {sa.marketArbitrageOpportunity}
+        </p>
+        <ol className="list-decimal space-y-1 pl-4">
+          {sa.tacticalExecutionDirectives.map((directive) => (
+            <li key={directive}>{directive}</li>
+          ))}
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 function ReportPanel({ result, error }: { result: SimulationResponse | null; error: string | null }) {
   const [copied, setCopied] = useState(false);
 
@@ -772,6 +831,8 @@ function ReportPanel({ result, error }: { result: SimulationResponse | null; err
           <div className="border-t border-white/[0.06] pt-4">
             <MarkdownReportView content={result.report} />
           </div>
+
+          {result.comparison && <ComparisonView comparison={result.comparison} />}
 
           {result.sources.length > 0 && (
             <div className="mt-6 border-t border-white/[0.07] pt-4">

@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/server';
-import { extractTags, writeReport } from '@/lib/providers/gemini';
+import { compareEvent, extractTags, writeReport } from '@/lib/providers/gemini';
 import { ProviderError } from '@/lib/providers/http';
 import { getArtistInsights, resolveTagIds } from '@/lib/providers/qloo';
 import { providerStatus, readFixture, recordFixture } from '@/lib/demoServer';
-import { extractUrl } from '@/lib/providers/tavily';
+import { extractUrl, searchHistoricalContext } from '@/lib/providers/tavily';
 import { simulationResponseSchema, type ResearchSource } from '@/types/shadowpersona';
 
 const mimeByExtension: Record<string, string> = {
@@ -170,7 +170,25 @@ export async function POST(request: Request) {
     }
 
     const { summary, report } = await writeReport({ tags: resolved.map((tag) => tag.name), evidence, webText });
-    const response = simulationResponseSchema.parse({ summary, evidence, report, sources, mode: 'live' });
+
+    // Best-effort: a failure here must not discard the core Qloo report.
+    let comparison;
+    try {
+      const resolvedNames = resolved.map((tag) => tag.name);
+      const historical = providerStatus().tavily
+        ? await searchHistoricalContext(`${resolvedNames.slice(0, 4).join(' ')} album launch event ticket sales attendance sponsorship results`)
+        : { sources: [], compacted: '' };
+      sources.push(...historical.sources);
+      comparison = await compareEvent({
+        tags: resolvedNames,
+        evidence,
+        historicalContext: historical.compacted,
+        briefText: webText,
+      });
+    } catch (error) {
+      console.error('Comparative analysis skipped', error instanceof Error ? error.message : 'unknown error');
+    }
+    const response = simulationResponseSchema.parse({ summary, evidence, report, sources, comparison, mode: 'live' });
     if (parsed.data.demoScenarioId && process.env.RECORD_DEMO_FIXTURES === '1') {
       await recordFixture(parsed.data.demoScenarioId, { ...response, mode: undefined });
     }
