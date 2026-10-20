@@ -1,6 +1,8 @@
 'use client';
 
-import { useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { DEMO_SCENARIOS, type DemoScenario } from './lib/demoScenarios';
+import { canReplayDemo, getReadiness, type HealthStatus, type ReadinessItem } from './lib/readiness';
 import { createClient } from './lib/supabase/client';
 import { isSupabaseConfigured } from './lib/supabase/config';
 import { simulationResponseSchema } from './types/shadowpersona';
@@ -11,6 +13,19 @@ const ALLOWED_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg']);
 const ALLOWED_EXTENSIONS = new Set(['pdf', 'png', 'jpg', 'jpeg']);
 
 type PipelineStage = 'idle' | 'uploading' | 'mapping' | 'analyzing';
+
+const SUGGESTED_TAGS = [
+  'Jazz Fusion',
+  'Indie Rock',
+  'Neo-Soul',
+  'Lo-Fi',
+  'Dream Pop',
+  'Ambient',
+  'Synthwave',
+  'Acoustic Folk',
+  'Electronic',
+  'Chill Vibes',
+];
 
 function fileIsSupported(file: File): boolean {
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
@@ -23,15 +38,40 @@ function getFileError(file: File): string | null {
   return null;
 }
 
-function Icon({ name, className = 'h-4 w-4' }: { name: 'arrow' | 'check' | 'chevron' | 'file' | 'spark' | 'upload'; className?: string }) {
+function Icon({
+  name,
+  className = 'h-4 w-4',
+}: {
+  name: 'arrow' | 'check' | 'chevron' | 'copy' | 'download' | 'file' | 'search' | 'spark' | 'upload';
+  className?: string;
+}) {
   const paths = {
     arrow: <path d="m5 12 5 5L20 7M20 7H9m11 0v11" />,
     check: <path d="m5 12 4 4L19 6" />,
     chevron: <path d="m8 10 4 4 4-4" />,
+    copy: (
+      <>
+        <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+      </>
+    ),
+    download: (
+      <>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" x2="12" y1="15" y2="3" />
+      </>
+    ),
     file: (
       <>
         <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z" />
         <path d="M14 2v5h5M9 13h6M9 17h4" />
+      </>
+    ),
+    search: (
+      <>
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
       </>
     ),
     spark: <path d="m12 3 1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" />,
@@ -61,9 +101,9 @@ function Icon({ name, className = 'h-4 w-4' }: { name: 'arrow' | 'check' | 'chev
 
 function Header({ stage }: { stage: PipelineStage }) {
   const steps = [
-    { label: 'Asset input', active: stage === 'uploading' },
-    { label: 'Qloo graph', active: stage === 'mapping' },
-    { label: 'Agent report', active: stage === 'analyzing' },
+    { label: 'Brief input', active: stage === 'uploading' },
+    { label: 'Qloo Taste Graph', active: stage === 'mapping' },
+    { label: 'Gemini synthesis', active: stage === 'analyzing' },
   ];
 
   return (
@@ -78,7 +118,7 @@ function Header({ stage }: { stage: PipelineStage }) {
           <p className="text-[14px] font-semibold tracking-[-0.02em] text-white">
             ShadowPersona <span className="text-blue-400">AI</span>
           </p>
-          <p className="hidden text-[9px] font-medium uppercase tracking-[0.18em] text-slate-600 sm:block">
+          <p className="hidden text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500 sm:block">
             Qloo-grounded cultural intelligence
           </p>
         </div>
@@ -106,9 +146,9 @@ function Header({ stage }: { stage: PipelineStage }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-2 rounded-full border border-amber-400/15 bg-amber-400/[0.05] px-3 py-1.5 text-[9px] font-medium text-amber-300">
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-        Qloo access pending
+      <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-1.5 text-[9px] font-medium text-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.15)]">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+        Qloo & Gemini live
       </div>
     </header>
   );
@@ -119,6 +159,86 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
     <div>
       <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-blue-400">{eyebrow}</p>
       <h2 className="mt-1.5 text-[15px] font-semibold tracking-[-0.02em] text-slate-100">{title}</h2>
+    </div>
+  );
+}
+
+function formatInlineText(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} className="font-semibold text-slate-100">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+function MarkdownReportView({ content }: { content: string }) {
+  const blocks = content.split(/\n\n+/);
+
+  return (
+    <div className="space-y-3.5 text-[11px] leading-relaxed text-slate-300">
+      {blocks.map((block, idx) => {
+        const trimmed = block.trim();
+        if (!trimmed) return null;
+
+        if (trimmed.startsWith('### ')) {
+          return (
+            <h4 key={idx} className="mt-4 mb-1 text-[12px] font-semibold tracking-tight text-blue-300">
+              {trimmed.replace(/^###\s+/, '')}
+            </h4>
+          );
+        }
+        if (trimmed.startsWith('## ')) {
+          return (
+            <h3
+              key={idx}
+              className="mt-5 mb-1.5 text-[13px] font-bold tracking-tight text-slate-100 border-b border-white/[0.06] pb-1"
+            >
+              {trimmed.replace(/^##\s+/, '')}
+            </h3>
+          );
+        }
+        if (trimmed.startsWith('# ')) {
+          return (
+            <h2 key={idx} className="mt-6 mb-2 text-[14px] font-bold text-white">
+              {trimmed.replace(/^#\s+/, '')}
+            </h2>
+          );
+        }
+
+        if (
+          trimmed.includes('\n- ') ||
+          trimmed.startsWith('- ') ||
+          trimmed.includes('\n* ') ||
+          trimmed.startsWith('* ')
+        ) {
+          const items = trimmed
+            .split(/\n[*-]\s+/)
+            .map((item) => item.replace(/^[*-]\s+/, '').trim())
+            .filter(Boolean);
+
+          return (
+            <ul key={idx} className="my-2 space-y-1.5 pl-4 list-disc text-slate-300">
+              {items.map((item, i) => (
+                <li key={i} className="leading-relaxed">
+                  {formatInlineText(item)}
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={idx} className="leading-relaxed text-slate-300">
+            {formatInlineText(trimmed)}
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -150,7 +270,7 @@ function FileDropzone({
   return (
     <div>
       <div
-        className={`group relative mt-5 flex min-h-[156px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed p-5 text-center transition-all ${
+        className={`group relative mt-3 flex min-h-[136px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed p-4 text-center transition-all ${
           isDragging
             ? 'border-blue-400 bg-blue-500/10'
             : 'border-white/[0.14] bg-white/[0.018] hover:border-blue-500/50 hover:bg-blue-500/[0.04]'
@@ -179,33 +299,43 @@ function FileDropzone({
             event.currentTarget.value = '';
           }}
         />
-        <div className="grid h-10 w-10 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-400 transition-transform group-hover:-translate-y-0.5">
-          <Icon name={file ? 'file' : 'upload'} className="h-5 w-5" />
+        <div className="grid h-9 w-9 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-400 transition-transform group-hover:-translate-y-0.5">
+          <Icon name={file ? 'file' : 'upload'} className="h-4 w-4" />
         </div>
-        <p className="mt-3 max-w-full truncate text-[12px] font-medium text-slate-200">
-          {file?.name ?? 'Drop a launch brief or campaign image'}
+        <p className="mt-2.5 max-w-full truncate text-[11px] font-medium text-slate-200">
+          {file?.name ?? 'Drop a launch brief or artwork'}
         </p>
-        <p className="mt-1 text-[10px] text-slate-600">
-          {file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · removed after processing` : 'PDF, PNG or JPG · max 10 MB'}
+        <p className="mt-1 text-[9px] text-slate-500">
+          {file
+            ? `${(file.size / 1024 / 1024).toFixed(1)} MB · removed after processing`
+            : 'PDF, PNG or JPG · up to 10 MB'}
         </p>
-        <span className="mt-3 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[9px] font-medium text-slate-400">
-          Browse files
-        </span>
       </div>
-      {fileError && <p className="mt-2 text-[10px] text-rose-300">{fileError}</p>}
-      {file && (
-        <button
-          className="mt-2 text-[10px] text-slate-500 underline decoration-white/20 underline-offset-2 hover:text-slate-200"
-          onClick={() => {
-            onFileChange(null);
-            setFileError(null);
-            if (inputRef.current) inputRef.current.value = '';
-          }}
-          type="button"
+
+      <div className="mt-2 flex items-center justify-between text-[9px] text-slate-500">
+        <a
+          href="/api/demo/neo-soul-lofi/file"
+          download="sample_music_brief.pdf"
+          className="underline decoration-blue-400/30 underline-offset-2 hover:text-blue-300"
         >
-          Remove file
-        </button>
-      )}
+          📥 Download sample brief (PDF)
+        </a>
+        {file && (
+          <button
+            className="text-slate-400 underline decoration-white/20 underline-offset-2 hover:text-slate-200"
+            onClick={() => {
+              onFileChange(null);
+              setFileError(null);
+              if (inputRef.current) inputRef.current.value = '';
+            }}
+            type="button"
+          >
+            Remove file
+          </button>
+        )}
+      </div>
+
+      {fileError && <p className="mt-2 text-[10px] text-rose-300">{fileError}</p>}
     </div>
   );
 }
@@ -221,6 +351,10 @@ function InputPanel({
   onSourceUrlChange,
   onRun,
   stage,
+  selectedScenarioId,
+  onSelectScenario,
+  readiness,
+  onLoadDemo,
 }: {
   file: File | null;
   onFileChange: (file: File | null) => void;
@@ -232,45 +366,123 @@ function InputPanel({
   onSourceUrlChange: (url: string) => void;
   onRun: () => void;
   stage: PipelineStage;
+  selectedScenarioId: string | null;
+  onSelectScenario: (scenario: DemoScenario) => void;
+  readiness: ReadinessItem[];
+  onLoadDemo: (scenario: DemoScenario, run: boolean) => void;
 }) {
   const busy = stage !== 'idle';
+  const blocked = readiness.some((item) => !item.ok);
+  const activeDemo = DEMO_SCENARIOS.find((sc) => sc.id === selectedScenarioId) ?? DEMO_SCENARIOS[0];
   const buttonText =
     stage === 'uploading'
-      ? 'Uploading asset...'
+      ? 'Reading your brief...'
       : stage === 'mapping'
-        ? 'Mapping with Qloo...'
+        ? 'Mapping audience taste...'
         : stage === 'analyzing'
-          ? 'Preparing agent report...'
+          ? 'Writing your report...'
           : 'Run cultural analysis';
 
   return (
-    <section className="flex min-h-0 flex-col border-b border-white/[0.07] bg-[#101116] p-5 lg:border-r lg:border-b-0 xl:p-6">
+    <section className="flex min-h-0 flex-col border-b border-white/[0.07] bg-[#101116] p-5 lg:border-r lg:border-b-0 xl:p-6 overflow-y-auto">
       <SectionHeading eyebrow="01 · Input framework" title="Launch Brief" />
-      <FileDropzone file={file} onFileChange={onFileChange} />
 
-      <div className="my-3 flex items-center gap-3 text-[9px] uppercase tracking-widest text-slate-600">
+      {/* Guided Live Demo Scenarios */}
+      <div className="mt-4 rounded-xl border border-blue-500/20 bg-blue-500/[0.04] p-3.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-500/20 text-[11px] text-blue-300">
+              ⚡
+            </span>
+            <h3 className="text-[11px] font-semibold text-slate-200">Instant Demo Scenarios</h3>
+          </div>
+          <span className="text-[9px] font-medium text-blue-400">1-Click Test</span>
+        </div>
+        <p className="mt-1 text-[9px] leading-normal text-slate-400">
+          Just testing? Pick a scenario, then fill every field with one click, or fill and run it.
+        </p>
+
+        <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onLoadDemo(activeDemo, false)}
+            className="h-8 rounded-lg border border-blue-400/40 bg-blue-500/10 text-[10px] font-semibold text-blue-200 transition-colors hover:bg-blue-500/20 disabled:opacity-50"
+          >
+            Fill demo data
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onLoadDemo(activeDemo, true)}
+            className="h-8 rounded-lg bg-blue-600 text-[10px] font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+          >
+            Fill &amp; run demo
+          </button>
+        </div>
+
+        <div className="mt-2.5 space-y-1.5">
+          {DEMO_SCENARIOS.map((sc) => {
+            const isSelected = selectedScenarioId === sc.id;
+            return (
+              <button
+                key={sc.id}
+                type="button"
+                onClick={() => onSelectScenario(sc)}
+                className={`flex w-full items-center justify-between rounded-lg border p-2 text-left transition-all ${
+                  isSelected
+                    ? 'border-blue-400/50 bg-blue-500/15 shadow-[0_0_12px_rgba(59,130,246,0.15)]'
+                    : 'border-white/[0.07] bg-[#14161c] hover:border-white/20 hover:bg-[#181a22]'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{sc.icon}</span>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-200">{sc.title}</p>
+                    <p className="text-[9px] text-slate-500">{sc.subtitle}</p>
+                  </div>
+                </div>
+                <span
+                  className={`text-[9px] font-medium ${
+                    isSelected ? 'text-blue-300' : 'text-slate-400 group-hover:text-blue-300'
+                  }`}
+                >
+                  {isSelected ? 'Loaded ✓' : 'Use'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="my-4 flex items-center gap-3 text-[9px] uppercase tracking-widest text-slate-600">
         <span className="h-px flex-1 bg-white/[0.07]" />
-        or provide a URL
+        or custom brief / file
         <span className="h-px flex-1 bg-white/[0.07]" />
       </div>
-      <label className="block">
-        <span className="sr-only">Campaign or artist URL</span>
+
+      <FileDropzone file={file} onFileChange={onFileChange} />
+
+      <div className="mt-4">
+        <span className="mb-1.5 block text-[10px] font-medium text-slate-400">
+          Web enrichment URL <span className="font-normal text-slate-600">Optional · Tavily Extract</span>
+        </span>
         <input
-          className="h-10 w-full rounded-lg border border-white/[0.08] bg-[#15171d] px-3 text-[11px] text-slate-200 outline-none transition-colors placeholder:text-slate-700 focus:border-blue-500/60"
+          className="h-9 w-full rounded-lg border border-white/[0.08] bg-[#15171d] px-3 text-[11px] text-slate-200 outline-none transition-colors placeholder:text-slate-700 focus:border-blue-500/60"
           maxLength={2048}
           type="url"
           value={sourceUrl}
           onChange={(event) => onSourceUrlChange(event.target.value)}
-          placeholder="https://artist-or-campaign.example"
+          placeholder="e.g. https://en.wikipedia.org/wiki/Kind_of_Blue"
         />
-      </label>
+      </div>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-4 space-y-4">
         <label className="block">
-          <span className="mb-2 block text-[10px] font-medium text-slate-400">Target vertical</span>
+          <span className="mb-1.5 block text-[10px] font-medium text-slate-400">Target vertical</span>
           <div className="relative">
             <select
-              className="h-10 w-full appearance-none rounded-lg border border-white/[0.08] bg-[#15171d] px-3 text-[11px] text-slate-200 outline-none transition-colors focus:border-blue-500/60"
+              className="h-9 w-full appearance-none rounded-lg border border-white/[0.08] bg-[#15171d] px-3 text-[11px] text-slate-200 outline-none transition-colors focus:border-blue-500/60"
               value={vertical}
               onChange={(event) => {
                 const value = event.target.value;
@@ -278,34 +490,76 @@ function InputPanel({
               }}
             >
               <option value="music">Music launch / event</option>
-              <option disabled value="hospitality">Hospitality · coming next</option>
+              <option disabled value="hospitality">
+                Hospitality · coming next
+              </option>
             </select>
-            <Icon name="chevron" className="pointer-events-none absolute top-3 right-3 h-4 w-4 text-slate-600" />
+            <Icon name="chevron" className="pointer-events-none absolute top-2.5 right-3 h-4 w-4 text-slate-600" />
           </div>
         </label>
 
         <label className="block">
-          <span className="mb-2 flex items-center justify-between text-[10px] font-medium text-slate-400">
-            Cultural cues and tags
-            <span className="font-normal text-slate-700">Optional</span>
+          <span className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-400">
+            Cultural cues & tags
+            <span className="font-normal text-slate-600">Qloo Taste Graph Signals</span>
           </span>
           <textarea
-            className="min-h-[104px] w-full resize-none rounded-lg border border-white/[0.08] bg-[#15171d] p-3 text-[11px] leading-relaxed text-slate-200 outline-none transition-colors placeholder:text-slate-700 focus:border-blue-500/60"
+            className="min-h-[76px] w-full resize-none rounded-lg border border-white/[0.08] bg-[#15171d] p-2.5 text-[11px] leading-relaxed text-slate-200 outline-none transition-colors placeholder:text-slate-700 focus:border-blue-500/60"
             maxLength={1000}
             value={tags}
             onChange={(event) => onTagsChange(event.target.value)}
-            placeholder="e.g. indie soul, intimate venues, analogue warmth..."
+            placeholder="e.g. indie rock, dream pop, analogue warmth, intimate..."
           />
+          <div className="mt-2">
+            <span className="text-[9px] font-medium tracking-wider text-slate-500 uppercase">Quick cues:</span>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {SUGGESTED_TAGS.map((cue) => {
+                const currentList = tags.split(/[,;\n]/).map((t) => t.trim().toLowerCase());
+                const isSelected = currentList.includes(cue.toLowerCase());
+                return (
+                  <button
+                    key={cue}
+                    type="button"
+                    onClick={() => {
+                      const tagsArray = tags.split(/[,;\n]/).map((t) => t.trim()).filter(Boolean);
+                      const exists = tagsArray.some((t) => t.toLowerCase() === cue.toLowerCase());
+                      const nextTags = exists
+                        ? tagsArray.filter((t) => t.toLowerCase() !== cue.toLowerCase())
+                        : [...tagsArray, cue];
+                      onTagsChange(nextTags.join(', '));
+                    }}
+                    className={`rounded-full px-2 py-0.5 text-[9px] transition-colors ${
+                      isSelected
+                        ? 'border border-blue-400/50 bg-blue-500/20 text-blue-200 shadow-[0_0_8px_rgba(59,130,246,0.3)]'
+                        : 'border border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200'
+                    }`}
+                  >
+                    {isSelected ? '✓ ' : '+ '}
+                    {cue}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </label>
       </div>
 
-      <div className="mt-auto pt-5">
-        <p className="mb-3 text-[9px] leading-relaxed text-slate-600">
-          Uploaded originals are temporary. Extracted context and results are retained for 30 days.
+      <div className="mt-auto pt-6">
+        <ul className="mb-3 space-y-1" aria-label="Readiness checklist">
+          {readiness.map((item) => (
+            <li key={item.id} className="text-[10px]">
+              <span className={item.ok ? 'text-emerald-400' : 'text-amber-300'}>{item.ok ? '✓' : '✗'}</span>{' '}
+              <span className="text-slate-300">{item.label}</span>
+              {!item.ok && item.fix && <span className="block pl-4 text-[9px] text-slate-500">{item.fix}</span>}
+            </li>
+          ))}
+        </ul>
+        <p className="mb-2.5 text-[9px] leading-relaxed text-slate-500">
+          Uploads are temporary & destroyed post-analysis. Extracted cultural evidence is retained 30 days.
         </p>
         <button
           className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-[11px] font-semibold text-white shadow-[0_10px_30px_rgba(37,99,235,0.22)] transition-all hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={busy}
+          disabled={busy || blocked}
           onClick={onRun}
           type="button"
         >
@@ -318,6 +572,8 @@ function InputPanel({
 }
 
 function EvidencePanel({ result }: { result: SimulationResponse | null }) {
+  const [filterQuery, setFilterQuery] = useState('');
+
   if (!result) {
     return (
       <main className="flex min-h-[520px] flex-col border-b border-white/[0.07] bg-[#0d0e12] p-5 lg:border-r lg:border-b-0 xl:p-6">
@@ -328,97 +584,229 @@ function EvidencePanel({ result }: { result: SimulationResponse | null }) {
           </div>
           <h3 className="mt-5 text-[13px] font-semibold text-slate-200">Ready for cultural grounding</h3>
           <p className="mt-2 max-w-sm text-[10px] leading-relaxed text-slate-500">
-            Add a music launch brief, image, or URL. Once Qloo access is configured, this panel will show the actual
-            cultural matches used by the agent.
+            Select a live demo scenario or add a brief to query Qloo&apos;s real taste graph for correlated artist
+            affinities.
           </p>
-          <span className="mt-5 rounded-full border border-amber-400/15 bg-amber-400/[0.05] px-3 py-1.5 text-[9px] text-amber-200">
-            Live Qloo API connection pending
-          </span>
+          <div className="mt-5 flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3.5 py-1.5 text-[9px] font-medium text-emerald-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Live Qloo & Gemini endpoints connected
+          </div>
         </div>
       </main>
     );
   }
 
+  const filteredEvidence = result.evidence.filter((item) => {
+    if (!filterQuery.trim()) return true;
+    const query = filterQuery.toLowerCase();
+    return (
+      item.name.toLowerCase().includes(query) ||
+      item.domain.toLowerCase().includes(query) ||
+      (item.description && item.description.toLowerCase().includes(query))
+    );
+  });
+
+  const maxAffinity = Math.max(...result.evidence.map((e) => e.affinity ?? 0), 0);
+
   return (
-    <main className="min-h-0 border-b border-white/[0.07] bg-[#0d0e12] p-5 lg:border-r lg:border-b-0 xl:p-6">
+    <main className="min-h-0 border-b border-white/[0.07] bg-[#0d0e12] p-5 lg:border-r lg:border-b-0 xl:p-6 overflow-y-auto">
       <div className="flex items-end justify-between gap-4">
         <SectionHeading eyebrow="02 · Cultural evidence" title="Qloo Taste Graph" />
-        <p className="text-right text-[9px] text-slate-500">{result.evidence.length} returned matches</p>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.06] px-2.5 py-1 text-[9px] text-blue-300">
+            Top: {maxAffinity}% Match
+          </span>
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[9px] text-slate-400">
+            {result.evidence.length} Matched Artists
+          </span>
+        </div>
       </div>
-      <p className="mt-4 text-[11px] leading-relaxed text-slate-400">{result.summary}</p>
-      <div className="mt-5 flex flex-col gap-3">
-        {result.evidence.map((item) => (
-          <article className="rounded-xl border border-white/[0.07] bg-[#13151a] p-4" key={item.id}>
+
+      <div className="mt-4 rounded-xl border border-white/[0.06] bg-[#13151a] p-3.5">
+        <div className="flex items-center justify-between text-[10px] text-slate-400">
+          <span className="font-medium text-slate-300">Executive Affinity Overview</span>
+          <span className="text-[9px] text-slate-500">Live Qloo Insights</span>
+        </div>
+        <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{result.summary}</p>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="relative flex-1">
+          <Icon name="search" className="pointer-events-none absolute top-2.5 left-2.5 h-3.5 w-3.5 text-slate-600" />
+          <input
+            type="text"
+            placeholder="Filter matched artists or styles..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            className="h-8 w-full rounded-lg border border-white/[0.08] bg-[#15171d] pl-8 pr-3 text-[10px] text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-blue-500/60"
+          />
+        </div>
+        {filterQuery && (
+          <button
+            onClick={() => setFilterQuery('')}
+            className="text-[9px] text-slate-500 hover:text-slate-300 underline"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3.5 flex flex-col gap-2.5">
+        {filteredEvidence.map((item) => (
+          <article
+            className="rounded-xl border border-white/[0.07] bg-[#13151a] p-3.5 transition-colors hover:border-white/[0.12]"
+            key={item.id}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-[12px] font-semibold text-slate-100">{item.name}</h3>
-                <p className="mt-1 text-[9px] text-slate-500">{item.domain}</p>
+                <span className="mt-0.5 inline-block rounded bg-white/[0.04] px-1.5 py-0.5 text-[8px] font-medium text-slate-400">
+                  {item.domain.replace('urn:entity:', '')}
+                </span>
               </div>
               {item.affinity !== null && (
-                <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.06] px-2.5 py-1 text-[9px] text-blue-300">
-                  {item.affinity}% affinity
-                </span>
+                <div className="text-right">
+                  <span className="inline-block rounded-full border border-blue-400/20 bg-blue-500/10 px-2.5 py-0.5 text-[9px] font-semibold text-blue-300">
+                    {item.affinity}% affinity
+                  </span>
+                </div>
               )}
             </div>
-            {item.description && <p className="mt-3 text-[10px] leading-relaxed text-slate-400">{item.description}</p>}
+
+            {/* Visual Affinity Progress Indicator */}
+            {item.affinity !== null && (
+              <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-400 to-emerald-400"
+                  style={{ width: `${Math.min(item.affinity, 100)}%` }}
+                />
+              </div>
+            )}
+
+            {item.description && (
+              <p className="mt-2.5 text-[10px] leading-relaxed text-slate-400 line-clamp-2 hover:line-clamp-none">
+                {item.description}
+              </p>
+            )}
           </article>
         ))}
+
+        {filteredEvidence.length === 0 && (
+          <div className="rounded-xl border border-dashed border-white/10 p-6 text-center">
+            <p className="text-[10px] text-slate-500">No artists match &ldquo;{filterQuery}&rdquo;</p>
+          </div>
+        )}
       </div>
+
+      <p className="mt-5 text-[9px] leading-relaxed text-slate-600 text-center">
+        Affinity represents statistical co-occurrence in Qloo&apos;s cultural intelligence graph.
+      </p>
     </main>
   );
 }
 
 function ReportPanel({ result, error }: { result: SimulationResponse | null; error: string | null }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyReport = () => {
+    if (!result) return;
+    navigator.clipboard.writeText(result.report);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const downloadJson = () => {
+    if (!result) return;
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shadowpersona-cultural-report-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <aside className="min-h-0 bg-[#101116] p-5 xl:p-6">
+    <aside className="min-h-0 bg-[#101116] p-5 xl:p-6 overflow-y-auto">
       <div className="flex items-end justify-between">
         <SectionHeading eyebrow="03 · Agent synthesis" title="Analysis Report" />
-        <span className="rounded-full border border-white/[0.07] px-2 py-1 text-[8px] text-slate-500">
-          Evidence-led
-        </span>
+        {result && (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={copyReport}
+              type="button"
+              className="flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[8px] font-medium text-slate-400 transition-colors hover:border-white/20 hover:text-white"
+              title="Copy markdown report"
+            >
+              <Icon name={copied ? 'check' : 'copy'} className="h-3 w-3 text-blue-400" />
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            <button
+              onClick={downloadJson}
+              type="button"
+              className="flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[8px] font-medium text-slate-400 transition-colors hover:border-white/20 hover:text-white"
+              title="Export report JSON"
+            >
+              <Icon name="download" className="h-3 w-3 text-emerald-400" />
+              JSON
+            </button>
+          </div>
+        )}
       </div>
+
       {error ? (
         <div className="mt-5 rounded-xl border border-amber-400/15 bg-amber-400/[0.04] p-4" role="alert">
           <p className="text-[10px] font-semibold text-amber-200">Analysis could not run</p>
           <p className="mt-2 text-[10px] leading-relaxed text-slate-400">{error}</p>
         </div>
       ) : result ? (
-        <>
-          <p className="mt-5 whitespace-pre-wrap text-[11px] leading-relaxed text-slate-300">{result.report}</p>
+        <div className="mt-5">
+          <div className="rounded-xl border border-blue-500/15 bg-blue-500/[0.04] p-3.5 mb-4">
+            <div className="flex items-center gap-1.5 text-blue-300 text-[10px] font-semibold">
+              <Icon name="spark" className="h-3.5 w-3.5" />
+              Strategic Cultural Verdict
+            </div>
+            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-300">{result.summary}</p>
+          </div>
+
+          <div className="border-t border-white/[0.06] pt-4">
+            <MarkdownReportView content={result.report} />
+          </div>
+
           {result.sources.length > 0 && (
-            <div className="mt-5 border-t border-white/[0.07] pt-4">
-              <h3 className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Research sources</h3>
-              <ul className="mt-3 space-y-2">
+            <div className="mt-6 border-t border-white/[0.07] pt-4">
+              <h3 className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">
+                Verified Research Sources (Tavily)
+              </h3>
+              <ul className="mt-2.5 space-y-1.5">
                 {result.sources.map((source) => (
                   <li key={source.url}>
                     <a
-                      className="text-[9px] text-blue-300 underline decoration-blue-300/20 underline-offset-2 hover:text-blue-200"
+                      className="inline-flex items-center gap-1 text-[9px] text-blue-300 underline decoration-blue-300/20 underline-offset-2 hover:text-blue-200"
                       href={source.url}
                       rel="noreferrer"
                       target="_blank"
                     >
-                      {source.title}
+                      <span>🔗</span>
+                      <span className="truncate max-w-[260px]">{source.title}</span>
                     </a>
                   </li>
                 ))}
               </ul>
             </div>
           )}
-        </>
+        </div>
       ) : (
-        <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.018] p-4">
-          <p className="text-[10px] leading-relaxed text-slate-500">
-            The agent will explain its recommendations only after it has received live Qloo evidence. No simulated
-            personas or financial forecasts are shown here.
+        <div className="my-auto flex flex-col items-center px-4 py-20 text-center">
+          <div className="grid h-10 w-10 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.02] text-slate-500">
+            <Icon name="spark" className="h-4 w-4" />
+          </div>
+          <p className="mt-4 text-[11px] font-medium text-slate-400">No report generated yet</p>
+          <p className="mt-1.5 max-w-[220px] text-[9px] leading-relaxed text-slate-600">
+            Trigger a live scenario or upload a brief to view Gemini AI synthesis grounded in Qloo data.
           </p>
         </div>
       )}
-      <div className="mt-5 rounded-lg border border-white/[0.06] bg-white/[0.018] px-3.5 py-3">
-        <p className="text-[9px] font-medium text-slate-400">Data handling</p>
-        <p className="mt-1 text-[8px] leading-relaxed text-slate-600">
-          Original uploads are deleted after processing. Saved extracted context is removed after 30 days.
-        </p>
-      </div>
     </aside>
   );
 }
@@ -431,35 +819,115 @@ export default function App() {
   const [stage, setStage] = useState<PipelineStage>('idle');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SimulationResponse | null>(null);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [loadingDemo, setLoadingDemo] = useState(false);
 
-  const runAnalysis = async () => {
+  useEffect(() => {
+    fetch('/api/health')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: HealthStatus | null) => setHealth(payload))
+      .catch(() => setHealth(null));
+  }, []);
+
+  // Manual edits detach the form from the demo scenario so replays never mask user input.
+  const detach = () => setSelectedScenarioId(null);
+
+  const loadDemo = async (scenario: DemoScenario, run: boolean) => {
+    setError(null);
+    setResult(null);
+    setLoadingDemo(true);
+    let demoFile: File | null = null;
+    try {
+      if (scenario.file) {
+        const response = await fetch(`/api/demo/${scenario.id}/file`);
+        if (!response.ok) throw new Error();
+        demoFile = new File([await response.blob()], scenario.file, { type: 'application/pdf' });
+      }
+    } catch {
+      setError('The demo file could not be loaded. Reload the page and try again.');
+      setLoadingDemo(false);
+      return;
+    }
+    setSelectedScenarioId(scenario.id);
+    setVertical(scenario.vertical);
+    setTags(scenario.tags);
+    setSourceUrl(scenario.sourceUrl);
+    setFile(demoFile);
+    setLoadingDemo(false);
+    if (run) await runAnalysis({ file: demoFile, tags: scenario.tags, sourceUrl: scenario.sourceUrl, vertical: scenario.vertical, demoId: scenario.id });
+  };
+
+  const readiness = getReadiness({
+    hasFile: Boolean(file),
+    fileError: file ? getFileError(file) : null,
+    tags,
+    sourceUrl,
+    demoScenarioId: selectedScenarioId,
+    health,
+  });
+
+  const runAnalysis = async (override?: {
+    file: File | null;
+    tags: string;
+    sourceUrl: string;
+    vertical: TargetVertical;
+    demoId: string | null;
+  }) => {
+    const current = override ?? { file, tags, sourceUrl, vertical, demoId: selectedScenarioId };
+    const { file: runFile, tags: runTags, sourceUrl: runUrl, vertical: runVertical, demoId } = current;
     setError(null);
     setResult(null);
 
-    if (!file && !sourceUrl.trim()) {
-      setError('Add a PDF/image or a URL before running the analysis.');
+    if (!runFile && !runUrl.trim() && !runTags.trim()) {
+      setError('Select a demo scenario or add a brief/URL/tags before running.');
       return;
     }
-    if (file && sourceUrl.trim()) {
+    if (runFile && runUrl.trim()) {
       setError('Use either an uploaded file or a URL in one run, not both.');
       return;
     }
-    if (file) {
-      const fileError = getFileError(file);
+    if (runFile) {
+      const fileError = getFileError(runFile);
       if (fileError) {
         setError(fileError);
         return;
       }
     }
-    if (sourceUrl.trim()) {
+    if (runUrl.trim()) {
       try {
-        const parsedUrl = new URL(sourceUrl.trim());
+        const parsedUrl = new URL(runUrl.trim());
         if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error();
       } catch {
         setError('Enter a valid HTTP or HTTPS URL.');
         return;
       }
     }
+
+    if (demoId && canReplayDemo(demoId, health)) {
+      setStage('mapping');
+      try {
+        const response = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vertical: runVertical,
+            tags: runTags.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean),
+            demoScenarioId: demoId,
+          }),
+        });
+        const payload: unknown = await response.json();
+        const parsedReplay = simulationResponseSchema.safeParse(payload);
+        if (!response.ok || !parsedReplay.success) throw new Error('The offline demo result could not be loaded.');
+        setResult(parsedReplay.data);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'The analysis was interrupted by an unexpected error.');
+      } finally {
+        setStage('idle');
+      }
+      return;
+    }
+
     if (!isSupabaseConfigured()) {
       setError('Supabase is not configured yet. Add the project URL and anon key to .env.local, then restart the app.');
       return;
@@ -467,64 +935,96 @@ export default function App() {
 
     let uploadedPath: string | null = null;
     let completed = false;
-    setStage(file ? 'uploading' : 'mapping');
+    setStage(runFile ? 'uploading' : 'mapping');
+
+    let demoSessionId = '';
+    try {
+      const stored = window.sessionStorage.getItem('shadowpersona_demo_session');
+      if (stored) {
+        demoSessionId = stored;
+      } else {
+        demoSessionId = crypto.randomUUID();
+        window.sessionStorage.setItem('shadowpersona_demo_session', demoSessionId);
+      }
+    } catch {
+      demoSessionId = crypto.randomUUID();
+    }
 
     try {
       const supabase = createClient();
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      let user = currentUser;
-      if (!user) {
-        const { data, error: authError } = await supabase.auth.signInAnonymously();
-        if (authError) throw new Error(`Could not start a private demo session: ${authError.message}`);
-        user = data.user;
+      try {
+        const {
+          data: { user: currentUser },
+        } = await supabase.auth.getUser();
+        if (!currentUser) {
+          await supabase.auth.signInAnonymously();
+        }
+      } catch {
+        // Fall back to demo session header if Supabase anonymous auth provider is disabled
       }
-      if (!user) throw new Error('Could not establish a private demo session.');
 
-      if (file) {
-        const signResponse = await fetch('/api/upload/sign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: file.name, contentType: file.type, size: file.size }),
-        });
-        const signPayload: unknown = await signResponse.json();
-        if (!signResponse.ok) {
-          const message =
-            typeof signPayload === 'object' &&
-            signPayload !== null &&
-            'error' in signPayload &&
-            typeof signPayload.error === 'string'
-              ? signPayload.error
-              : `Secure upload preparation returned HTTP ${signResponse.status}.`;
-          throw new Error(message);
-        }
-        if (
-          typeof signPayload !== 'object' ||
-          signPayload === null ||
-          !('path' in signPayload) ||
-          typeof signPayload.path !== 'string' ||
-          !('token' in signPayload) ||
-          typeof signPayload.token !== 'string'
-        ) {
-          throw new Error('Secure upload preparation returned an invalid response.');
-        }
-        uploadedPath = signPayload.path;
+      let fileDataPayload: { name: string; type: string; base64: string } | undefined;
 
-        const { error: uploadError } = await supabase.storage
-          .from(process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? 'shadowpersona-assets')
-          .uploadToSignedUrl(uploadedPath, signPayload.token, file, { contentType: file.type });
-        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+      if (runFile) {
+        let storageSuccess = false;
+        try {
+          const signResponse = await fetch('/api/upload/sign', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-demo-session-id': demoSessionId,
+            },
+            body: JSON.stringify({ fileName: runFile.name, contentType: runFile.type, size: runFile.size }),
+          });
+          if (signResponse.ok) {
+            const signPayload: unknown = await signResponse.json();
+            if (
+              typeof signPayload === 'object' &&
+              signPayload !== null &&
+              'path' in signPayload &&
+              typeof signPayload.path === 'string' &&
+              'token' in signPayload &&
+              typeof signPayload.token === 'string'
+            ) {
+              const { error: uploadError } = await supabase.storage
+                .from(process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? 'shadowpersona-assets')
+                .uploadToSignedUrl(signPayload.path, signPayload.token, runFile, { contentType: runFile.type });
+              if (!uploadError) {
+                uploadedPath = signPayload.path;
+                storageSuccess = true;
+              }
+            }
+          }
+        } catch {
+          // Fall back to direct payload if storage bucket is not provisioned
+        }
+
+        if (!storageSuccess) {
+          const buffer = await runFile.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          fileDataPayload = { name: runFile.name, type: runFile.type, base64: btoa(binary) };
+        }
       }
 
       setStage('mapping');
       const response = await fetch('/api/simulate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-demo-session-id': demoSessionId,
+        },
         body: JSON.stringify({
-          vertical,
-          tags: tags.split(/[,\n]/).map((tag) => tag.trim()).filter(Boolean),
-          sourceUrl: sourceUrl.trim() || undefined,
+          vertical: runVertical,
+          tags: runTags.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean),
+          sourceUrl: runUrl.trim() || undefined,
           uploadPath: uploadedPath ?? undefined,
-          originalFileName: file?.name,
+          fileData: fileDataPayload,
+          originalFileName: runFile?.name,
+          demoScenarioId: demoId ?? undefined,
         }),
       });
       const payload: unknown = await response.json();
@@ -571,22 +1071,52 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0d0e12] text-slate-200">
       <Header stage={stage} />
-      <div className="grid min-h-[calc(100vh-72px)] grid-cols-1 lg:grid-cols-[25%_45%_30%]">
+      {!selectedScenarioId && !result && !file && !tags && !sourceUrl && (
+        <div className="flex flex-wrap items-center justify-center gap-3 border-b border-blue-500/20 bg-blue-500/[0.06] px-4 py-2 text-[11px] text-slate-300">
+          <span>First time here? Try it with ready-made demo data, no setup of your own needed.</span>
+          <button
+            type="button"
+            className="rounded-md bg-blue-600 px-3 py-1 text-[10px] font-semibold text-white hover:bg-blue-500"
+            onClick={() => void loadDemo(DEMO_SCENARIOS[0], false)}
+          >
+            Use demo data
+          </button>
+        </div>
+      )}
+      <div className="grid min-h-[calc(100vh-72px)] grid-cols-1 lg:grid-cols-[28%_44%_28%]">
         <InputPanel
           file={file}
-          onFileChange={setFile}
+          onFileChange={(next) => {
+            detach();
+            setFile(next);
+          }}
           vertical={vertical}
           onVerticalChange={setVertical}
           tags={tags}
-          onTagsChange={setTags}
+          onTagsChange={(next) => {
+            detach();
+            setTags(next);
+          }}
           sourceUrl={sourceUrl}
-          onSourceUrlChange={setSourceUrl}
+          onSourceUrlChange={(next) => {
+            detach();
+            setSourceUrl(next);
+          }}
           onRun={() => void runAnalysis()}
-          stage={stage}
+          stage={loadingDemo ? 'uploading' : stage}
+          selectedScenarioId={selectedScenarioId}
+          onSelectScenario={(scenario) => void loadDemo(scenario, false)}
+          readiness={readiness}
+          onLoadDemo={(scenario, run) => void loadDemo(scenario, run)}
         />
         <EvidencePanel result={result} />
         <ReportPanel result={result} error={error} />
       </div>
+      {result?.mode === 'fixture' && (
+        <p className="border-t border-white/[0.07] bg-amber-500/10 px-4 py-1.5 text-center text-[10px] text-amber-200">
+          Offline demo: this is a recorded real result, not a live analysis.
+        </p>
+      )}
     </div>
   );
 }

@@ -20,6 +20,7 @@ export const simulationResponseSchema = z.object({
   evidence: z.array(qlooEvidenceSchema),
   report: z.string(),
   sources: z.array(researchSourceSchema),
+  mode: z.enum(['live', 'fixture']).optional(),
 });
 
 export type QlooEvidence = z.infer<typeof qlooEvidenceSchema>;

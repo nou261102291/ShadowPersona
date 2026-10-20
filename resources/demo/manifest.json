@@ -1,0 +1,38 @@
+[
+  {
+    "id": "neo-soul-lofi",
+    "title": "Midnight Soliloquy (EP)",
+    "subtitle": "PDF brief + tags",
+    "icon": "🌙",
+    "description": "Intimate bedroom neo-soul EP. Exercises the file-upload path: Gemini reads the PDF, then Qloo maps the taste graph.",
+    "vertical": "music",
+    "tags": "Neo-Soul, Lo-Fi, Downtempo, Analogue Warmth, Chill, Intimate",
+    "sourceUrl": "",
+    "file": "sample_music_brief.pdf",
+    "rationale": "Demonstrates Qloo clustering of modern downtempo beats with classic neo-soul."
+  },
+  {
+    "id": "indie-dreampop",
+    "title": "Solaris Prism (LP)",
+    "subtitle": "Tags only",
+    "icon": "🎸",
+    "description": "Reverb-drenched festival rock. Exercises the fastest path: cultural tags only, no file or URL.",
+    "vertical": "music",
+    "tags": "Indie Rock, Dream Pop, Psychedelic Rock, Synthwave, Atmospheric",
+    "sourceUrl": "",
+    "file": "",
+    "rationale": "Tests cross-genre affinity between modern indie and 80s synth revival artists."
+  },
+  {
+    "id": "modal-jazz-heritage",
+    "title": "Kind of Blue (Archival)",
+    "subtitle": "Web URL + tags",
+    "icon": "🎷",
+    "description": "Archival jazz release enriched with live Tavily web research from Wikipedia.",
+    "vertical": "music",
+    "tags": "Modal Jazz, Cool Jazz, Instrumental, Classic, Trumpet",
+    "sourceUrl": "https://en.wikipedia.org/wiki/Kind_of_Blue",
+    "file": "",
+    "rationale": "Runs the full pipeline: Tavily URL extraction, Gemini structuring and Qloo Taste Graph."
+  }
+]

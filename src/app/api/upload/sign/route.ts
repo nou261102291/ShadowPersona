@@ -41,12 +41,14 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const demoSessionHeader = request.headers.get('x-demo-session-id');
+  if (!user && !demoSessionHeader) {
     return NextResponse.json({ error: 'A private demo session could not be verified. Reload and try again.' }, { status: 401 });
   }
+  const sessionId = user?.id ?? demoSessionHeader!;
 
-  const path = `${user.id}/${crypto.randomUUID()}.${extension}`;
+  const path = `${sessionId}/${crypto.randomUUID()}.${extension}`;
   const { data, error } = await supabase.storage
     .from(process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? 'shadowpersona-assets')
     .createSignedUploadUrl(path);
