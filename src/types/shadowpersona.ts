@@ -134,10 +134,12 @@ export const simulationResponseSchema = z.object({
   evidence: z.array(qlooEvidenceSchema),
   report: z.string(),
   sources: z.array(researchSourceSchema),
+  resolvedTags: z.array(z.string()).optional(),
   comparison: comparativeAnalysisSchema.optional(),
   comparisonStatus: z.enum(['complete', 'skipped', 'failed']).optional(),
   optimization: optimizationDataSchema.optional(),
   promoterROI: promoterROIDataSchema.optional(),
+  promoterROIStatus: z.enum(['complete', 'failed', 'skipped']).optional(),
   mode: z.enum(['live', 'fixture']).optional(),
 });
 

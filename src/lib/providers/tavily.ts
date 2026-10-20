@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { httpUrlSchema, type CompetitiveBenchmark, type ResearchSource } from '@/types/shadowpersona';
+import {
+  httpUrlSchema,
+  type CompetitiveBenchmark,
+  type PromoterLocation,
+  type ResearchSource,
+} from '@/types/shadowpersona';
 import { fetchWithBackoff, requireEnv } from './http';
 
 const extractSchema = z.object({
@@ -62,12 +67,16 @@ interface HistoricalSearch {
 }
 
 // Widens the query step by step until a search yields quantitative text.
-export async function searchHistoricalContext(tags: string[]): Promise<HistoricalSearch & { query: string | null }> {
+export async function searchHistoricalContext(
+  tags: string[],
+  location?: PromoterLocation,
+): Promise<HistoricalSearch & { query: string | null }> {
   const metrics = 'ticket sales attendance revenue sponsorship';
+  const locale = location ? ` ${location}` : '';
   const queries = [
-    `${tags.slice(0, 3).join(' ')} album launch event ${metrics}`,
-    `${tags[0] ?? 'music'} concert ${metrics}`,
-    `live music concert ${metrics} benchmark`,
+    `${tags.slice(0, 3).join(' ')} album launch event${locale} ticket prices ${metrics}`,
+    `${tags[0] ?? 'music'} concert${locale} ticket prices attendance`,
+    `live music concert${locale} ticket price benchmark`,
   ].filter((query, index, all) => all.indexOf(query) === index);
 
   for (const query of queries) {

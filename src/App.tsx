@@ -6,8 +6,10 @@ import { canReplayDemo, getReadiness, type HealthStatus, type ReadinessItem } fr
 import { createClient } from './lib/supabase/client';
 import { isSupabaseConfigured } from './lib/supabase/config';
 import OptimizationSuite from './components/OptimizationSuite';
+import PromoterROIConsole from './components/PromoterROIConsole';
 import { simulationResponseSchema } from './types/shadowpersona';
-import type { ComparativeAnalysis, SimulationResponse, TargetVertical } from './types/shadowpersona';
+import { promoterROIDataSchema } from './types/shadowpersona';
+import type { ComparativeAnalysis, PromoterLocation, SimulationResponse, TargetVertical } from './types/shadowpersona';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg']);
@@ -37,6 +39,18 @@ function getFileError(file: File): string | null {
   if (file.size > MAX_FILE_SIZE) return 'Choose a file smaller than 10 MB.';
   if (!fileIsSupported(file)) return 'Supported formats are PDF, PNG, and JPG.';
   return null;
+}
+
+function getDemoSessionId(): string {
+  try {
+    const stored = window.sessionStorage.getItem('shadowpersona_demo_session');
+    if (stored) return stored;
+    const sessionId = crypto.randomUUID();
+    window.sessionStorage.setItem('shadowpersona_demo_session', sessionId);
+    return sessionId;
+  } catch {
+    return crypto.randomUUID();
+  }
 }
 
 function Icon({
@@ -1018,18 +1032,7 @@ export default function App() {
     let completed = false;
     setStage(runFile ? 'uploading' : 'mapping');
 
-    let demoSessionId = '';
-    try {
-      const stored = window.sessionStorage.getItem('shadowpersona_demo_session');
-      if (stored) {
-        demoSessionId = stored;
-      } else {
-        demoSessionId = crypto.randomUUID();
-        window.sessionStorage.setItem('shadowpersona_demo_session', demoSessionId);
-      }
-    } catch {
-      demoSessionId = crypto.randomUUID();
-    }
+    const demoSessionId = getDemoSessionId();
 
     try {
       const supabase = createClient();
@@ -1149,6 +1152,34 @@ export default function App() {
     }
   };
 
+  const refreshPromoterROI = async (location: PromoterLocation) => {
+    if (!result) throw new Error('Run a cultural analysis before changing the venue market.');
+    const response = await fetch('/api/promoter-roi', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-demo-session-id': getDemoSessionId(),
+      },
+      body: JSON.stringify({
+        tags:
+          result.resolvedTags ??
+          tags.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean),
+        location,
+      }),
+    });
+    const payload: unknown = await response.json();
+    if (!response.ok) {
+      const message =
+        typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
+          ? payload.error
+          : `The promoter analysis returned HTTP ${response.status}.`;
+      throw new Error(message);
+    }
+    const parsedPromoterROI = promoterROIDataSchema.safeParse(payload);
+    if (!parsedPromoterROI.success) throw new Error('The promoter analysis returned an unexpected response.');
+    setResult((current) => (current ? { ...current, promoterROI: parsedPromoterROI.data, promoterROIStatus: 'complete' } : current));
+  };
+
   return (
     <div className="min-h-screen bg-[#0d0e12] text-slate-200">
       <Header stage={stage} />
@@ -1193,6 +1224,19 @@ export default function App() {
         <EvidencePanel result={result} />
         <ReportPanel result={result} error={error} />
       </div>
+      {result?.promoterROI ? (
+        <div className="border-t border-[#1F222F] bg-[#0D0E12] p-3 sm:p-5 xl:p-7">
+          <PromoterROIConsole
+            data={result.promoterROI}
+            tags={result.resolvedTags ?? tags.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean)}
+            onLocationChange={refreshPromoterROI}
+          />
+        </div>
+      ) : result?.promoterROIStatus && result.promoterROIStatus !== 'complete' ? (
+        <div role="status" className="border-t border-[#1F222F] bg-[#101116] p-4 text-center text-xs text-amber-200">
+          Promoter ROI data could not be generated for this analysis. The cultural evidence and report above remain available.
+        </div>
+      ) : null}
       {result?.mode === 'fixture' && (
         <p className="border-t border-white/[0.07] bg-amber-500/10 px-4 py-1.5 text-center text-[10px] text-amber-200">
           Offline demo: this is a recorded real result, not a live analysis.

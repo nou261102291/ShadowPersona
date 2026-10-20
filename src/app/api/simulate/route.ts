@@ -2,12 +2,17 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/server';
-import { compareEvent, extractTags, optimizeEvent, writeReport } from '@/lib/providers/gemini';
+import { buildPromoterROI, compareEvent, extractTags, optimizeEvent, writeReport } from '@/lib/providers/gemini';
 import { ProviderError } from '@/lib/providers/http';
 import { getArtistInsights, resolveTagIds } from '@/lib/providers/qloo';
 import { providerStatus, readFixture, recordFixture } from '@/lib/demoServer';
 import { extractUrl, searchHistoricalContext } from '@/lib/providers/tavily';
-import { simulationResponseSchema, type ResearchSource } from '@/types/shadowpersona';
+import {
+  promoterLocationSchema,
+  simulationResponseSchema,
+  type PromoterROIData,
+  type ResearchSource,
+} from '@/types/shadowpersona';
 
 export const maxDuration = 60;
 
@@ -33,6 +38,7 @@ const requestSchema = z.object({
   uploadPath: z.string().min(1).max(512).optional(),
   originalFileName: z.string().min(1).max(255).optional(),
   demoScenarioId: z.string().regex(/^[a-z0-9-]+$/).max(64).optional(),
+  location: promoterLocationSchema.default('San Francisco, CA'),
   fileData: z
     .object({
       name: z.string().min(1).max(255),
@@ -184,17 +190,17 @@ export async function POST(request: Request) {
     let comparisonStatus: 'complete' | 'skipped' | 'failed' = 'skipped';
     if (providerStatus().tavily) {
       try {
-        historical = await searchHistoricalContext(resolvedNames);
+        historical = await searchHistoricalContext(resolvedNames, parsed.data.location);
         console.info(`Historical search: query=${historical.query ?? 'none'} chars=${historical.compacted.length}`);
         sources.push(...historical.sources);
-        comparisonStatus = 'complete';
+        comparisonStatus = historical.compacted ? 'complete' : 'skipped';
       } catch (error) {
         comparisonStatus = 'failed';
         console.error('Historical search failed', error instanceof Error ? error.message : 'unknown error');
       }
     }
 
-    const [comparisonResult, optimizationResult] = await Promise.allSettled([
+    const [comparisonResult, optimizationResult, promoterROIResult] = await Promise.allSettled([
       comparisonStatus === 'complete'
         ? compareEvent({
             tags: resolvedNames,
@@ -204,6 +210,14 @@ export async function POST(request: Request) {
           })
         : Promise.resolve(undefined),
       optimizeEvent({ tags: resolvedNames, evidence, historicalContext: historical.compacted }),
+      buildPromoterROI({
+        location: parsed.data.location,
+        tags: resolvedNames,
+        evidence,
+        historicalContext: historical.compacted,
+        benchmarks: historical.benchmarks,
+        comparisonStatus,
+      }),
     ]);
 
     let comparison;
@@ -221,14 +235,30 @@ export async function POST(request: Request) {
       console.error('Optimization failed', optimizationResult.reason instanceof Error ? optimizationResult.reason.message : 'unknown error');
     }
 
+    let promoterROI: PromoterROIData | undefined;
+    let promoterROIStatus: 'complete' | 'failed' | 'skipped' = 'skipped';
+    if (promoterROIResult.status === 'fulfilled') {
+      promoterROI = promoterROIResult.value;
+      promoterROIStatus = 'complete';
+    } else {
+      promoterROIStatus = 'failed';
+      console.error(
+        'Promoter ROI analysis failed',
+        promoterROIResult.reason instanceof Error ? promoterROIResult.reason.message : 'unknown error',
+      );
+    }
+
     const response = simulationResponseSchema.parse({
       summary,
       evidence,
       report,
       sources,
+      resolvedTags: resolved.map((tag) => tag.name),
       comparison,
       comparisonStatus,
       optimization,
+      promoterROI,
+      promoterROIStatus,
       mode: 'live',
     });
     if (parsed.data.demoScenarioId && process.env.RECORD_DEMO_FIXTURES === '1') {
