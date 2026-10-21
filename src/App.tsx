@@ -145,7 +145,7 @@ function Icon({
   );
 }
 
-function Header({ stage }: { stage: PipelineStage }) {
+function Header({ stage, health }: { stage: PipelineStage; health: HealthStatus | null }) {
   const steps = [
     { label: 'Brief input', active: stage === 'uploading' },
     { label: 'Qloo Taste Graph', active: stage === 'mapping' || stage === 'analyzing' },
@@ -192,9 +192,15 @@ function Header({ stage }: { stage: PipelineStage }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-1.5 text-[9px] font-medium text-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.15)]">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
-        Qloo & Gemini live
+      <div
+        className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[9px] font-medium ${
+          health?.live
+            ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.15)]'
+            : 'border-amber-400/20 bg-amber-400/[0.08] text-amber-200'
+        }`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${health?.live ? 'bg-emerald-400' : 'bg-amber-300'}`} />
+        {health ? (health.live ? 'Live analysis ready' : 'Setup required') : 'Checking services…'}
       </div>
     </header>
   );
@@ -617,10 +623,19 @@ function InputPanel({
   );
 }
 
-function EvidencePanel({ result }: { result: SimulationResponse | null }) {
+function EvidencePanel({ result, health }: { result: SimulationResponse | null; health: HealthStatus | null }) {
   const [filterQuery, setFilterQuery] = useState('');
 
   if (!result) {
+    const serviceStatus = health
+      ? health.live
+        ? 'Live Qloo & Gemini analysis ready'
+        : 'Live analysis setup required'
+      : 'Checking service readiness…';
+    const serviceStatusClass = health?.live
+      ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300'
+      : 'border-amber-400/20 bg-amber-400/[0.08] text-amber-200';
+
     return (
       <main className="flex min-h-[520px] flex-col border-b border-white/[0.07] bg-[#0d0e12] p-5 lg:border-r lg:border-b-0 xl:p-6">
         <SectionHeading eyebrow="02 · Cultural evidence" title="Qloo Taste Graph" />
@@ -633,9 +648,9 @@ function EvidencePanel({ result }: { result: SimulationResponse | null }) {
             Select a live demo scenario or add a brief to query Qloo&apos;s real taste graph for correlated artist
             affinities.
           </p>
-          <div className="mt-5 flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3.5 py-1.5 text-[9px] font-medium text-emerald-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Live Qloo & Gemini endpoints connected
+          <div className={`mt-5 flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[9px] font-medium ${serviceStatusClass}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${health?.live ? 'bg-emerald-400' : 'bg-amber-300'}`} />
+            {serviceStatus}
           </div>
         </div>
       </main>
@@ -891,7 +906,7 @@ function ReportPanel({
             <div>
               <p className="text-[10px] font-semibold text-blue-200">{progressMessage}</p>
               <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
-                Qloo signals, market research, and report insights are being assembled. This can take a few minutes.
+                Waiting for live Qloo, Tavily, and Gemini responses.
               </p>
             </div>
           </div>
@@ -1245,7 +1260,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0d0e12] text-slate-200">
-      <Header stage={stage} />
+      <Header stage={stage} health={health} />
       {!selectedScenarioId && !result && !file && !tags && !sourceUrl && (
         <div className="flex flex-wrap items-center justify-center gap-3 border-b border-blue-500/20 bg-blue-500/[0.06] px-4 py-2 text-[11px] text-slate-300">
           <span>First time here? Try it with ready-made demo data, no setup of your own needed.</span>
@@ -1284,7 +1299,7 @@ export default function App() {
           readiness={readiness}
           onLoadDemo={(scenario, run) => void loadDemo(scenario, run)}
         />
-        <EvidencePanel result={result} />
+        <EvidencePanel result={result} health={health} />
         <ReportPanel result={result} error={error} stage={stage} />
       </div>
       {result?.promoterROI ? (

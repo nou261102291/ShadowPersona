@@ -1,6 +1,15 @@
+import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { isSupabaseAdminConfigured } from '@/lib/supabase/admin';
+import {
+  claimSimulationCache,
+  completeSimulationCache,
+  createSimulationCacheIdentity,
+  releaseSimulationClaim,
+  type SimulationCacheClaim,
+} from '@/lib/supabase/geminiControls';
 import { createClient } from '@/lib/supabase/server';
 import { buildPromoterROI, compareEvent, extractTags, optimizeEvent, writeReport } from '@/lib/providers/gemini';
 import { ProviderError } from '@/lib/providers/http';
@@ -75,13 +84,20 @@ export async function POST(request: Request) {
 
   // Offline demo: replay a recorded real response when live providers are not configured.
   const providers = providerStatus();
-  if (parsed.data.demoScenarioId && !(providers.qloo && providers.gemini)) {
+  const liveReady = providers.qloo && providers.gemini && isSupabaseAdminConfigured();
+  if (parsed.data.demoScenarioId && !liveReady) {
     const fixture = await readFixture(parsed.data.demoScenarioId);
     if (fixture) return NextResponse.json({ ...fixture, mode: 'fixture' });
   }
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: 'Supabase is not configured on the server.' }, { status: 503 });
+  }
+  if (!isSupabaseAdminConfigured()) {
+    return NextResponse.json(
+      { error: 'The shared Gemini quota guard is not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY.' },
+      { status: 503 },
+    );
   }
 
   const supabase = await createClient();
@@ -102,6 +118,8 @@ export async function POST(request: Request) {
 
   const bucket = supabase.storage.from(process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? 'shadowpersona-assets');
   let upload: { base64: string; mimeType: string } | undefined;
+  let activeCacheClaim: SimulationCacheClaim | undefined;
+  let cacheStored = false;
 
   if (parsed.data.fileData) {
     const rawBuffer = Buffer.from(parsed.data.fileData.base64, 'base64');
@@ -148,6 +166,41 @@ export async function POST(request: Request) {
   }
 
   try {
+    const fileContentHash = upload
+      ? createHash('sha256').update(upload.base64).digest('hex')
+      : null;
+    const cacheIdentity = createSimulationCacheIdentity(sessionId, {
+      version: 3,
+      vertical: parsed.data.vertical,
+      tags: parsed.data.tags.map((tag) => tag.trim().toLowerCase()).sort(),
+      sourceUrl: parsed.data.sourceUrl ?? null,
+      fileContentHash,
+      location: parsed.data.location,
+      demoScenarioId: parsed.data.demoScenarioId ?? null,
+      geminiModel: process.env.GEMINI_MODEL_ID ?? null,
+      geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL_ID ?? null,
+      tavilyEnabled: providers.tavily,
+    });
+    const cacheClaim = await claimSimulationCache(cacheIdentity);
+    if (cacheClaim.outcome === 'cached') {
+      const cachedResponse = simulationResponseSchema.safeParse(cacheClaim.response);
+      if (!cachedResponse.success) {
+        console.error('Cached simulation response failed schema validation.');
+        throw new ProviderError('Simulation cache', 502, 'Cached analysis data is invalid. Start a new run.');
+      }
+      return NextResponse.json(
+        { ...cachedResponse.data, mode: 'live' },
+        { headers: { 'x-shadowpersona-cache': 'hit' } },
+      );
+    }
+    if (cacheClaim.outcome === 'in_progress') {
+      return NextResponse.json(
+        { error: 'An identical analysis is already running. Wait for it to finish before retrying.' },
+        { status: 409, headers: { 'Retry-After': String(cacheClaim.retryAfterSeconds) } },
+      );
+    }
+    activeCacheClaim = cacheIdentity;
+
     let webText: string | undefined;
     const sources: ResearchSource[] = [];
     if (parsed.data.sourceUrl) {
@@ -177,27 +230,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Qloo returned no matches for these descriptors.' }, { status: 422 });
     }
 
-    const { summary, report } = await writeReport({ tags: resolved.map((tag) => tag.name), evidence, webText });
-
-    // Best-effort stages: a failure here must not discard the core Qloo report.
     const resolvedNames = resolved.map((tag) => tag.name);
-    let historical: Awaited<ReturnType<typeof searchHistoricalContext>> = {
+    const emptyHistorical: Awaited<ReturnType<typeof searchHistoricalContext>> = {
       sources: [],
       benchmarks: [],
       compacted: '',
       query: null,
     };
+    const historicalPromise = providerStatus().tavily
+      ? searchHistoricalContext(resolvedNames, parsed.data.location)
+      : Promise.resolve(emptyHistorical);
+    const [reportResult, historicalResult] = await Promise.allSettled([
+      writeReport({ tags: resolvedNames, evidence }),
+      historicalPromise,
+    ]);
+    if (reportResult.status === 'rejected') throw reportResult.reason;
+    const { summary, report } = reportResult.value;
+
+    // Best-effort market research runs alongside report generation.
+    let historical: Awaited<ReturnType<typeof searchHistoricalContext>> = emptyHistorical;
     let comparisonStatus: 'complete' | 'skipped' | 'failed' = 'skipped';
-    if (providerStatus().tavily) {
-      try {
-        historical = await searchHistoricalContext(resolvedNames, parsed.data.location);
-        console.info(`Historical search: query=${historical.query ?? 'none'} chars=${historical.compacted.length}`);
-        sources.push(...historical.sources);
-        comparisonStatus = historical.compacted ? 'complete' : 'skipped';
-      } catch (error) {
-        comparisonStatus = 'failed';
-        console.error('Historical search failed', error instanceof Error ? error.message : 'unknown error');
-      }
+    if (historicalResult.status === 'fulfilled') {
+      historical = historicalResult.value;
+      console.info(`Historical search: query=${historical.query ?? 'none'} chars=${historical.compacted.length}`);
+      sources.push(...historical.sources);
+      comparisonStatus = historical.compacted ? 'complete' : 'skipped';
+    } else {
+      comparisonStatus = 'failed';
+      console.error(
+        'Historical search failed',
+        historicalResult.reason instanceof Error ? historicalResult.reason.message : 'unknown error',
+      );
     }
 
     const [comparisonResult, optimizationResult, promoterROIResult] = await Promise.allSettled([
@@ -264,6 +327,21 @@ export async function POST(request: Request) {
     if (parsed.data.demoScenarioId && process.env.RECORD_DEMO_FIXTURES === '1') {
       await recordFixture(parsed.data.demoScenarioId, { ...response, mode: undefined });
     }
+    const completeRun =
+      response.promoterROIStatus === 'complete' &&
+      response.optimization !== undefined &&
+      response.comparisonStatus !== 'failed';
+    if (activeCacheClaim && completeRun) {
+      try {
+        cacheStored = await completeSimulationCache(activeCacheClaim, response);
+        if (!cacheStored) console.error('Simulation result was not cached because its claim expired.');
+      } catch (cacheError) {
+        console.error(
+          'Could not cache successful simulation.',
+          cacheError instanceof Error ? cacheError.message : 'unknown error',
+        );
+      }
+    }
     return NextResponse.json(response);
   } catch (error) {
     if (error instanceof ProviderError) {
@@ -273,6 +351,7 @@ export async function POST(request: Request) {
     console.error('Simulation failed', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ error: 'The simulation could not be completed.' }, { status: 500 });
   } finally {
+    if (activeCacheClaim && !cacheStored) await releaseSimulationClaim(activeCacheClaim);
     if (parsed.data.uploadPath) await bucket.remove([parsed.data.uploadPath]);
   }
 }

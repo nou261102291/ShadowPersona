@@ -2,6 +2,7 @@ export interface HealthStatus {
   supabase: boolean;
   qloo: boolean;
   gemini: boolean;
+  geminiLimiter: boolean;
   tavily: boolean;
   live: boolean;
   fixtures: string[];
@@ -64,13 +65,14 @@ export function getReadiness(input: ReadinessInput): ReadinessItem[] {
       !input.health.supabase && 'Supabase',
       !input.health.qloo && 'Qloo',
       !input.health.gemini && 'Gemini',
+      !input.health.geminiLimiter && 'Gemini quota guard',
       Boolean(url) && !input.health.tavily && 'Tavily',
     ].filter(Boolean);
     items.push({
       id: 'services',
       label: missing.length ? `Setup needed: ${missing.join(', ')}` : 'Analysis services connected',
       ok: missing.length === 0,
-      fix: 'Add the missing keys to .env.local and restart (see .env.example).',
+      fix: 'Set the server keys in .env.local and apply the latest Supabase migration (see .env.example).',
     });
   }
   return items;
