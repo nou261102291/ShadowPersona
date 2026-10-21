@@ -49,6 +49,29 @@ function getAnalysisErrorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : 'The analysis was interrupted by an unexpected error.';
 }
 
+async function readApiResponse(response: Response, serviceName: string): Promise<unknown> {
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    if (!response.ok) {
+      throw new Error(
+        `${serviceName} returned HTTP ${response.status} without a JSON response. The request may have timed out; please retry.`,
+      );
+    }
+    throw new Error(`${serviceName} returned an invalid response. Please retry.`);
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
+        ? payload.error
+        : `${serviceName} returned HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
 function getDemoSessionId(): string {
   try {
     const stored = window.sessionStorage.getItem('shadowpersona_demo_session');
@@ -125,7 +148,7 @@ function Icon({
 function Header({ stage }: { stage: PipelineStage }) {
   const steps = [
     { label: 'Brief input', active: stage === 'uploading' },
-    { label: 'Qloo Taste Graph', active: stage === 'mapping' },
+    { label: 'Qloo Taste Graph', active: stage === 'mapping' || stage === 'analyzing' },
     { label: 'Gemini synthesis', active: stage === 'analyzing' },
   ];
 
@@ -789,7 +812,15 @@ function ComparisonView({ comparison }: { comparison: ComparativeAnalysis }) {
   );
 }
 
-function ReportPanel({ result, error }: { result: SimulationResponse | null; error: string | null }) {
+function ReportPanel({
+  result,
+  error,
+  stage,
+}: {
+  result: SimulationResponse | null;
+  error: string | null;
+  stage: PipelineStage;
+}) {
   const [copied, setCopied] = useState(false);
 
   const copyReport = () => {
@@ -810,8 +841,16 @@ function ReportPanel({ result, error }: { result: SimulationResponse | null; err
     URL.revokeObjectURL(url);
   };
 
+  const isBusy = stage !== 'idle';
+  const progressMessage =
+    stage === 'uploading'
+      ? 'Preparing your brief…'
+      : stage === 'mapping'
+        ? 'Resolving cultural signals…'
+        : 'Generating your analysis report…';
+
   return (
-    <aside className="min-h-0 bg-[#101116] p-5 xl:p-6 overflow-y-auto">
+    <aside aria-busy={isBusy} className="min-h-0 bg-[#101116] p-5 xl:p-6 overflow-y-auto">
       <div className="flex items-end justify-between">
         <SectionHeading eyebrow="03 · Agent synthesis" title="Analysis Report" />
         {result && (
@@ -838,7 +877,29 @@ function ReportPanel({ result, error }: { result: SimulationResponse | null; err
         )}
       </div>
 
-      {error ? (
+      {isBusy ? (
+        <div
+          aria-live="polite"
+          className="mt-5 rounded-xl border border-blue-400/20 bg-blue-500/[0.05] p-4"
+          role="status"
+        >
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-300/25 border-t-blue-300 motion-reduce:animate-none"
+            />
+            <div>
+              <p className="text-[10px] font-semibold text-blue-200">{progressMessage}</p>
+              <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
+                Qloo signals, market research, and report insights are being assembled. This can take a few minutes.
+              </p>
+            </div>
+          </div>
+          <div aria-hidden="true" className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+            <span className="analysis-progress-segment block h-full w-1/3 rounded-full bg-blue-400" />
+          </div>
+        </div>
+      ) : error ? (
         <div className="mt-5 rounded-xl border border-amber-400/15 bg-amber-400/[0.04] p-4" role="alert">
           <p className="text-[10px] font-semibold text-amber-200">Analysis could not run</p>
           <p className="mt-2 text-[10px] leading-relaxed text-slate-400">{error}</p>
@@ -1008,7 +1069,7 @@ export default function App() {
     }
 
     if (demoId && canReplayDemo(demoId, health)) {
-      setStage('mapping');
+      setStage('analyzing');
       try {
         const response = await fetch('/api/simulate', {
           method: 'POST',
@@ -1019,9 +1080,9 @@ export default function App() {
             demoScenarioId: demoId,
           }),
         });
-        const payload: unknown = await response.json();
+        const payload = await readApiResponse(response, 'Offline demo service');
         const parsedReplay = simulationResponseSchema.safeParse(payload);
-        if (!response.ok || !parsedReplay.success) throw new Error('The offline demo result could not be loaded.');
+        if (!parsedReplay.success) throw new Error('The offline demo result could not be loaded.');
         setResult(parsedReplay.data);
       } catch (cause) {
         setError(getAnalysisErrorMessage(cause));
@@ -1038,38 +1099,40 @@ export default function App() {
 
     let uploadedPath: string | null = null;
     let completed = false;
-    setStage(runFile ? 'uploading' : 'mapping');
+    setStage(runFile ? 'uploading' : 'analyzing');
 
     const demoSessionId = getDemoSessionId();
+    let supabase: ReturnType<typeof createClient> | null = null;
+    let hasAuthenticatedSession = false;
 
     try {
-      const supabase = createClient();
-      try {
-        const {
-          data: { user: currentUser },
-        } = await supabase.auth.getUser();
-        if (!currentUser) {
-          await supabase.auth.signInAnonymously();
+      if (runFile) {
+        supabase = createClient();
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          hasAuthenticatedSession = Boolean(session?.user);
+        } catch (authError) {
+          console.warn('Could not read the Supabase upload session; using direct file transfer.', authError);
         }
-      } catch {
-        // Fall back to demo session header if Supabase anonymous auth provider is disabled
       }
 
       let fileDataPayload: { name: string; type: string; base64: string } | undefined;
 
       if (runFile) {
         let storageSuccess = false;
-        try {
-          const signResponse = await fetch('/api/upload/sign', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-demo-session-id': demoSessionId,
-            },
-            body: JSON.stringify({ fileName: runFile.name, contentType: runFile.type, size: runFile.size }),
-          });
-          if (signResponse.ok) {
-            const signPayload: unknown = await signResponse.json();
+        if (hasAuthenticatedSession && supabase) {
+          try {
+            const signResponse = await fetch('/api/upload/sign', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-demo-session-id': demoSessionId,
+              },
+              body: JSON.stringify({ fileName: runFile.name, contentType: runFile.type, size: runFile.size }),
+            });
+            const signPayload = await readApiResponse(signResponse, 'Secure upload service');
             if (
               typeof signPayload === 'object' &&
               signPayload !== null &&
@@ -1084,14 +1147,21 @@ export default function App() {
               if (!uploadError) {
                 uploadedPath = signPayload.path;
                 storageSuccess = true;
+              } else {
+                console.warn('Secure file upload was denied; using direct file transfer.', uploadError);
               }
             }
+          } catch (uploadError) {
+            console.warn('Secure upload is unavailable; using direct file transfer.', uploadError);
           }
-        } catch {
-          // Fall back to direct payload if storage bucket is not provisioned
         }
 
         if (!storageSuccess) {
+          if (runFile.size > 3 * 1024 * 1024) {
+            throw new Error(
+              'Secure upload is unavailable. Files larger than 3 MB require an authenticated Supabase storage session; enable anonymous sign-in and the storage policies, then retry.',
+            );
+          }
           const buffer = await runFile.arrayBuffer();
           const bytes = new Uint8Array(buffer);
           let binary = '';
@@ -1102,7 +1172,7 @@ export default function App() {
         }
       }
 
-      setStage('mapping');
+      setStage('analyzing');
       const response = await fetch('/api/simulate', {
         method: 'POST',
         headers: {
@@ -1119,15 +1189,7 @@ export default function App() {
           demoScenarioId: demoId ?? undefined,
         }),
       });
-      const payload: unknown = await response.json();
-
-      if (!response.ok) {
-        const message =
-          typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
-            ? payload.error
-            : `The analysis service returned HTTP ${response.status}.`;
-        throw new Error(message);
-      }
+      const payload = await readApiResponse(response, 'Analysis service');
 
       setStage('analyzing');
       const parsedResult = simulationResponseSchema.safeParse(payload);
@@ -1175,14 +1237,7 @@ export default function App() {
         location,
       }),
     });
-    const payload: unknown = await response.json();
-    if (!response.ok) {
-      const message =
-        typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
-          ? payload.error
-          : `The promoter analysis returned HTTP ${response.status}.`;
-      throw new Error(message);
-    }
+    const payload = await readApiResponse(response, 'Promoter analysis service');
     const parsedPromoterROI = promoterROIDataSchema.safeParse(payload);
     if (!parsedPromoterROI.success) throw new Error('The promoter analysis returned an unexpected response.');
     setResult((current) => (current ? { ...current, promoterROI: parsedPromoterROI.data, promoterROIStatus: 'complete' } : current));
@@ -1230,7 +1285,7 @@ export default function App() {
           onLoadDemo={(scenario, run) => void loadDemo(scenario, run)}
         />
         <EvidencePanel result={result} />
-        <ReportPanel result={result} error={error} />
+        <ReportPanel result={result} error={error} stage={stage} />
       </div>
       {result?.promoterROI ? (
         <div className="border-t border-[#1F222F] bg-[#0D0E12] p-3 sm:p-5 xl:p-7">

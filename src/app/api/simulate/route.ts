@@ -14,7 +14,7 @@ import {
   type ResearchSource,
 } from '@/types/shadowpersona';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const mimeByExtension: Record<string, string> = {
   pdf: 'application/pdf',

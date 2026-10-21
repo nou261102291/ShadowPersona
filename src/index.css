@@ -13,6 +13,28 @@
   box-sizing: border-box;
 }
 
+@keyframes analysis-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.analysis-progress-segment {
+  animation: analysis-progress-slide 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-progress-segment {
+    width: 100%;
+    animation: none;
+    opacity: 0.65;
+    transform: none;
+  }
+}
+
 html {
   background: #0d0e12;
 }

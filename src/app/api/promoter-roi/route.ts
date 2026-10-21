@@ -9,7 +9,7 @@ import { providerStatus } from '@/lib/demoServer';
 import { searchHistoricalContext } from '@/lib/providers/tavily';
 import { promoterLocationSchema, promoterROIDataSchema } from '@/types/shadowpersona';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const requestSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(80)).min(1).max(20),

@@ -20,41 +20,76 @@ const responseSchema = z.object({
     .min(1),
 });
 
-async function generateJson<T>(parts: Part[], schema: z.ZodType<T>): Promise<T> {
+async function generateJson<T>(
+  parts: Part[],
+  schema: z.ZodType<T>,
+  { schemaRetries = 0 }: { schemaRetries?: number } = {},
+): Promise<T> {
   const models = [requireEnv('GEMINI_MODEL_ID'), process.env.GEMINI_FALLBACK_MODEL_ID].filter(
     (model): model is string => Boolean(model) && !model!.startsWith('replace-'),
   );
-  let response: Response | undefined;
-  for (const [index, model] of models.entries()) {
+  let correction: Part | undefined;
+
+  for (let schemaAttempt = 0; schemaAttempt <= schemaRetries; schemaAttempt++) {
+    let response: Response | undefined;
+    for (const [index, model] of models.entries()) {
+      try {
+        response = await fetchWithBackoff(
+          'Gemini',
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': requireEnv('GEMINI_API_KEY') },
+            body: JSON.stringify({
+              contents: [{ parts: correction ? [...parts, correction] : parts }],
+              generationConfig: { responseMimeType: 'application/json' },
+            }),
+          },
+          { retries: index === models.length - 1 ? 3 : 1 },
+        );
+        break;
+      } catch (error) {
+        const transient = error instanceof ProviderError && (error.status === 429 || error.status >= 500);
+        if (!transient || index === models.length - 1) throw error;
+      }
+    }
+    if (!response) throw new ProviderError('Gemini', 502, 'No Gemini model is configured.');
+
+    let rawResponse: unknown;
     try {
-      response = await fetchWithBackoff(
-        'Gemini',
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': requireEnv('GEMINI_API_KEY') },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: { responseMimeType: 'application/json' },
-          }),
-        },
-        { retries: index === models.length - 1 ? 3 : 1 },
-      );
-      break;
-    } catch (error) {
-      const transient = error instanceof ProviderError && (error.status === 429 || error.status >= 500);
-      if (!transient || index === models.length - 1) throw error;
+      rawResponse = await response.json();
+    } catch {
+      throw new ProviderError('Gemini', 502, 'Gemini returned an unreadable response.');
+    }
+    const parsedResponse = responseSchema.safeParse(rawResponse);
+    if (!parsedResponse.success) {
+      throw new ProviderError('Gemini', 502, 'Gemini returned a response in an unexpected format.');
+    }
+
+    const text = parsedResponse.data.candidates[0].content.parts.map((part) => part.text ?? '').join('');
+    let output: unknown;
+    let validationMessage: string;
+    try {
+      output = JSON.parse(text);
+      const parsedOutput = schema.safeParse(output);
+      if (parsedOutput.success) return parsedOutput.data;
+      validationMessage = parsedOutput.error.issues
+        .slice(0, 8)
+        .map((issue) => `${issue.path.join('.') || 'output'}: ${issue.message}`)
+        .join('; ');
+    } catch {
+      validationMessage = 'The response was not valid JSON.';
+    }
+
+    if (schemaAttempt < schemaRetries) {
+      correction = {
+        text: `The previous response did not pass validation: ${validationMessage}. Regenerate the complete response using the requested JSON shape and the supplied evidence. Return only valid JSON.`,
+      };
+      continue;
     }
   }
-  if (!response) throw new ProviderError('Gemini', 502, 'No Gemini model is configured.');
 
-  const parsed = responseSchema.parse(await response.json());
-  const text = parsed.candidates[0].content.parts.map((part) => part.text ?? '').join('');
-  try {
-    return schema.parse(JSON.parse(text));
-  } catch {
-    throw new ProviderError('Gemini', 502, 'Gemini returned output that did not match the expected schema.');
-  }
+  throw new ProviderError('Gemini', 502, 'Gemini returned output that did not match the expected schema.');
 }
 
 const untrustedNotice =
@@ -193,7 +228,7 @@ Required shape:
   "pricing": {"optimalGeneralAdmissionTierUsd": 0, "generalAdmissionTrendPct": 0, "localCompetitorAverageUsd": null, "localCompetitorSourceUrl": null, "vipPremiumCeilingTierUsd": 0, "vipTrendPct": 0, "attendeeMarginOptimizationPct": 0, "supplyDemandCurve": [{"priceUsd": 0, "demandIndex": 0}, {"priceUsd": 0, "demandIndex": 0}]},
   "sponsorshipMatches": [{"targetBrandCategory": "string", "audienceAffinityMatchPct": 0, "justification": "string"}]
 }`;
-  const generated = await generateJson([{ text: prompt }], promoterROIModelSchema);
+  const generated = await generateJson([{ text: prompt }], promoterROIModelSchema, { schemaRetries: 1 });
   const evidenceById = new Map(input.evidence.map((item) => [item.id, item]));
   const talentProfiles = generated.talentProfiles.filter((profile) => {
     const evidence = evidenceById.get(profile.artistId);
