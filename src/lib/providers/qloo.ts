@@ -16,7 +16,13 @@ const insightsSchema = z.object({
         entity_id: z.string(),
         subtype: z.string().optional(),
         properties: z.object({ description: z.string().nullish() }).passthrough().optional(),
-        query: z.object({ affinity: z.number().nullish() }).passthrough().optional(),
+        query: z
+          .object({
+            affinity: z.number().nullish(),
+            explainability: z.record(z.string(), z.unknown()).nullish(),
+          })
+          .passthrough()
+          .optional(),
       }),
     ),
   }),
@@ -35,38 +41,31 @@ export async function resolveTagIds(tags: string[]): Promise<{ id: string; name:
   const unique = new Map<string, { id: string; name: string }>();
   const cleanTags = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))];
 
+  const pendingTags = [...cleanTags];
+  const workerCount = Math.min(2, pendingTags.length);
   await Promise.all(
-    cleanTags.map(async (tag) => {
-      // 1. Try artist-specific tags first (genres, subgenres, music styles)
-      try {
-        const parsed = tagsSchema.parse(
+    Array.from({ length: workerCount }, async () => {
+      let tag = pendingTags.shift();
+      while (tag !== undefined) {
+        const artistSpecific = tagsSchema.parse(
           await qlooGet('/v2/tags', {
             'filter.query': tag,
             'filter.parents.types': 'urn:entity:artist',
             take: '2',
           }),
         );
-        for (const t of parsed.results.tags) {
-          unique.set(t.id, t);
-        }
-        if (parsed.results.tags.length > 0) return;
-      } catch {
-        // Fall back to general lookup
-      }
+        for (const result of artistSpecific.results.tags) unique.set(result.id, result);
 
-      // 2. Fall back to general tags (mood, ambience, aesthetic, audience)
-      try {
-        const parsed = tagsSchema.parse(
-          await qlooGet('/v2/tags', {
-            'filter.query': tag,
-            take: '2',
-          }),
-        );
-        for (const t of parsed.results.tags) {
-          unique.set(t.id, t);
+        if (artistSpecific.results.tags.length === 0) {
+          const general = tagsSchema.parse(
+            await qlooGet('/v2/tags', {
+              'filter.query': tag,
+              take: '2',
+            }),
+          );
+          for (const result of general.results.tags) unique.set(result.id, result);
         }
-      } catch {
-        // Ignore single tag lookup errors
+        tag = pendingTags.shift();
       }
     }),
   );
@@ -74,19 +73,29 @@ export async function resolveTagIds(tags: string[]): Promise<{ id: string; name:
   return [...unique.values()];
 }
 
-export async function getArtistInsights(tagIds: string[]): Promise<QlooEvidence[]> {
+async function getInsights(type: 'artist' | 'brand', tagIds: string[]): Promise<QlooEvidence[]> {
   const parsed = insightsSchema.parse(
     await qlooGet('/v2/insights', {
-      'filter.type': 'urn:entity:artist',
+      'filter.type': `urn:entity:${type}`,
       'signal.interests.tags': tagIds.join(','),
+      'feature.explainability': 'true',
       take: '10',
     }),
   );
   return parsed.results.entities.map((entity) => ({
     id: entity.entity_id,
     name: entity.name,
-    domain: entity.subtype ?? 'urn:entity:artist',
+    domain: entity.subtype ?? `urn:entity:${type}`,
     affinity: typeof entity.query?.affinity === 'number' ? Math.round(entity.query.affinity * 100) : null,
     description: entity.properties?.description ?? null,
+    explainability: entity.query?.explainability ?? undefined,
   }));
+}
+
+export async function getArtistInsights(tagIds: string[]): Promise<QlooEvidence[]> {
+  return getInsights('artist', tagIds);
+}
+
+export async function getBrandInsights(tagIds: string[]): Promise<QlooEvidence[]> {
+  return getInsights('brand', tagIds);
 }

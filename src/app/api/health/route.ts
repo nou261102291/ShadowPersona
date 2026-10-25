@@ -8,12 +8,12 @@ export const dynamic = 'force-dynamic';
 // Reports only whether each integration is configured; never any key values.
 export async function GET() {
   const providers = providerStatus();
-  const geminiLimiter = await isGeminiControlsReady();
+  const analysisControls = await isGeminiControlsReady();
   return NextResponse.json({
     supabase: isSupabaseConfigured(),
-    geminiLimiter,
+    analysisControls,
     ...providers,
-    live: providers.qloo && providers.gemini && geminiLimiter,
+    live: providers.qloo && providers.analysisModel && analysisControls,
     fixtures: await listFixtureIds(),
   });
 }

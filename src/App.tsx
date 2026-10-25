@@ -8,9 +8,12 @@ import { isSupabaseConfigured } from './lib/supabase/config';
 import OptimizationSuite from './components/OptimizationSuite';
 import PromoterROIConsole from './components/PromoterROIConsole';
 import PromoterROIUnavailable from './components/PromoterROIUnavailable';
-import { simulationResponseSchema } from './types/shadowpersona';
+import EventForecastPanel from './components/EventForecastPanel';
+import EventPlanInputs from './components/EventPlanInputs';
+import { hasEventPlanningInput } from './lib/eventPlanning';
+import { eventPlanSchema, simulationResponseSchema } from './types/shadowpersona';
 import { promoterROIDataSchema } from './types/shadowpersona';
-import type { ComparativeAnalysis, PromoterLocation, SimulationResponse, TargetVertical } from './types/shadowpersona';
+import type { ComparativeAnalysis, EventPlan, PromoterLocation, SimulationResponse, TargetVertical } from './types/shadowpersona';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg']);
@@ -399,6 +402,8 @@ function InputPanel({
   onVerticalChange,
   tags,
   onTagsChange,
+  eventPlan,
+  onEventPlanChange,
   sourceUrl,
   onSourceUrlChange,
   onRun,
@@ -414,6 +419,8 @@ function InputPanel({
   onVerticalChange: (vertical: TargetVertical) => void;
   tags: string;
   onTagsChange: (tags: string) => void;
+  eventPlan: EventPlan;
+  onEventPlanChange: (plan: EventPlan) => void;
   sourceUrl: string;
   onSourceUrlChange: (url: string) => void;
   onRun: () => void;
@@ -433,7 +440,7 @@ function InputPanel({
         ? 'Mapping audience taste...'
         : stage === 'analyzing'
           ? 'Writing your report...'
-          : 'Run cultural analysis';
+          : 'Run event analysis';
 
   return (
     <section className="flex min-h-0 flex-col border-b border-white/[0.07] bg-[#101116] p-5 lg:border-r lg:border-b-0 xl:p-6 overflow-y-auto">
@@ -514,6 +521,19 @@ function InputPanel({
       </div>
 
       <FileDropzone file={file} onFileChange={onFileChange} />
+
+      <aside
+        aria-label="Privacy and provider data use"
+        className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/[0.035] p-3"
+      >
+        <p className="text-[10px] font-semibold text-amber-100">Privacy &amp; data use</p>
+        <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
+          Qloo receives the cultural tags used for matching, not your uploaded file. Your brief and event details are sent
+          to the configured analysis model; if Tavily is enabled, your URL or a search query built from tags and event
+          details may also be sent to Tavily. Uploaded files are removed after processing. Avoid sensitive or identifying
+          information, or use tags only and leave the brief and URL blank.
+        </p>
+      </aside>
 
       <div className="mt-4">
         <span className="mb-1.5 block text-[10px] font-medium text-slate-400">
@@ -596,6 +616,8 @@ function InputPanel({
         </label>
       </div>
 
+      <EventPlanInputs plan={eventPlan} onChange={onEventPlanChange} />
+
       <div className="mt-auto pt-6">
         <ul className="mb-3 space-y-1" aria-label="Readiness checklist">
           {readiness.map((item) => (
@@ -675,7 +697,7 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
         <SectionHeading eyebrow="02 · Cultural evidence" title="Qloo Taste Graph" />
         <div className="flex items-center gap-2">
           <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.06] px-2.5 py-1 text-[9px] text-blue-300">
-            Top: {maxAffinity}% Match
+            Top affinity score: {maxAffinity}
           </span>
           <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[9px] text-slate-400">
             {result.evidence.length} Matched Artists
@@ -690,6 +712,22 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{result.summary}</p>
       </div>
+
+      {result.resolvedTags && result.resolvedTags.length > 0 && (
+        <div className="mt-3 rounded-xl border border-white/[0.06] bg-[#13151a] p-3.5">
+          <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Interest tags resolved by Qloo</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {result.resolvedTags.map((tag) => (
+              <span
+                className="rounded-full border border-blue-400/15 bg-blue-400/[0.05] px-2 py-1 text-[9px] text-blue-200"
+                key={tag}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="relative flex-1">
@@ -728,7 +766,7 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
               {item.affinity !== null && (
                 <div className="text-right">
                   <span className="inline-block rounded-full border border-blue-400/20 bg-blue-500/10 px-2.5 py-0.5 text-[9px] font-semibold text-blue-300">
-                    {item.affinity}% affinity
+                    Affinity signal: {item.affinity}
                   </span>
                 </div>
               )}
@@ -749,6 +787,19 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
                 {item.description}
               </p>
             )}
+            <details className="mt-2 text-[9px] text-slate-500">
+              <summary className="cursor-pointer hover:text-slate-300">Qloo contribution details and entity ID</summary>
+              {item.explainability ? (
+                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-black/20 p-2 text-[8px]">
+                  {JSON.stringify(item.explainability, null, 2)}
+                </pre>
+              ) : (
+                <p className="mt-1 rounded bg-black/20 p-2 text-[8px]">
+                  Qloo did not provide per-entity explainability for this result.
+                </p>
+              )}
+              <code className="mt-1 block break-all rounded bg-black/20 p-2">{item.id}</code>
+            </details>
           </article>
         ))}
 
@@ -759,8 +810,59 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
         )}
       </div>
 
+      <section className="mt-5 rounded-xl border border-violet-400/15 bg-violet-400/[0.035] p-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[10px] font-semibold text-violet-100">Cross-domain: Qloo brand matches</h3>
+          <span className="text-[8px] uppercase tracking-wider text-violet-300">Taste tags → brands</span>
+        </div>
+        <p className="mt-1.5 text-[9px] leading-relaxed text-slate-400">
+          These are graph-associated brand entities, not confirmed sponsors or local businesses. Verify availability,
+          audience fit, and commercial interest independently.
+        </p>
+        {result.brandEvidenceStatus === 'failed' ? (
+          <p className="mt-2 text-[9px] text-amber-200">
+            Qloo brand insights were unavailable for this run. Artist evidence remains available.
+          </p>
+        ) : result.brandEvidenceStatus === 'empty' ? (
+          <p className="mt-2 text-[9px] text-slate-500">Qloo returned no brand matches for these tags.</p>
+        ) : result.brandEvidenceStatus === 'complete' ? (
+          <div className="mt-2.5 flex flex-col gap-2">
+            {(result.brandEvidence ?? []).map((brand) => (
+              <article className="rounded-lg border border-white/[0.07] bg-[#13151a] p-2.5" key={brand.id}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h4 className="text-[10px] font-medium text-slate-100">{brand.name}</h4>
+                    <span className="text-[8px] text-slate-500">{brand.domain.replace('urn:entity:', '')}</span>
+                  </div>
+                  {brand.affinity !== null && (
+                    <span className="shrink-0 text-[8px] text-violet-200">Affinity signal: {brand.affinity}</span>
+                  )}
+                </div>
+                {brand.description && <p className="mt-1 text-[9px] leading-relaxed text-slate-400">{brand.description}</p>}
+                <details className="mt-1.5 text-[8px] text-slate-500">
+                  <summary className="cursor-pointer hover:text-slate-300">Qloo contribution details and entity ID</summary>
+                  {brand.explainability ? (
+                    <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-black/20 p-2">
+                      {JSON.stringify(brand.explainability, null, 2)}
+                    </pre>
+                  ) : (
+                    <p className="mt-1 rounded bg-black/20 p-2">
+                      Qloo did not provide per-entity explainability for this result.
+                    </p>
+                  )}
+                  <code className="mt-1 block break-all rounded bg-black/20 p-2">{brand.id}</code>
+                </details>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-[9px] text-slate-500">This saved result does not include a live brand lookup.</p>
+        )}
+      </section>
+
       <p className="mt-5 text-[9px] leading-relaxed text-slate-600 text-center">
-        Affinity represents statistical co-occurrence in Qloo&apos;s cultural intelligence graph.
+        Affinity is shown on the app&apos;s 0–100 display scale. It is a graph signal—not a probability of attendance,
+        purchase, or an individual&apos;s preferences.
       </p>
     </main>
   );
@@ -940,7 +1042,7 @@ function ReportPanel({
             result.comparisonStatus !== 'complete' && (
               <p className="mt-6 border-t border-white/[0.07] pt-4 text-[10px] text-slate-500">
                 {result.comparisonStatus === 'skipped'
-                  ? 'Historical comparison was skipped because web research (Tavily) is not configured.'
+                  ? 'Historical comparison was not generated for this run. Review the cited sources and deterministic event forecast for planning context.'
                   : 'Historical comparison could not be generated for this run. The cultural-fit report above is unaffected.'}
               </p>
             )
@@ -994,6 +1096,7 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [vertical, setVertical] = useState<TargetVertical>('music');
   const [tags, setTags] = useState('');
+  const [eventPlan, setEventPlan] = useState<EventPlan>(() => eventPlanSchema.parse({}));
   const [sourceUrl, setSourceUrl] = useState('');
   const [stage, setStage] = useState<PipelineStage>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -1031,10 +1134,21 @@ export default function App() {
     setSelectedScenarioId(scenario.id);
     setVertical(scenario.vertical);
     setTags(scenario.tags);
+    const nextEventPlan = scenario.eventPlan ?? eventPlanSchema.parse({});
+    setEventPlan(nextEventPlan);
     setSourceUrl(scenario.sourceUrl);
     setFile(demoFile);
     setLoadingDemo(false);
-    if (run) await runAnalysis({ file: demoFile, tags: scenario.tags, sourceUrl: scenario.sourceUrl, vertical: scenario.vertical, demoId: scenario.id });
+    if (run) {
+      await runAnalysis({
+        file: demoFile,
+        tags: scenario.tags,
+        sourceUrl: scenario.sourceUrl,
+        vertical: scenario.vertical,
+        demoId: scenario.id,
+        eventPlan: nextEventPlan,
+      });
+    }
   };
 
   const readiness = getReadiness({
@@ -1042,6 +1156,7 @@ export default function App() {
     fileError: file ? getFileError(file) : null,
     tags,
     sourceUrl,
+    hasEventContext: Boolean(eventPlan.featuredTalent.trim() || eventPlan.hosts.trim() || eventPlan.tone.trim()),
     demoScenarioId: selectedScenarioId,
     health,
   });
@@ -1052,14 +1167,23 @@ export default function App() {
     sourceUrl: string;
     vertical: TargetVertical;
     demoId: string | null;
+    eventPlan: EventPlan;
   }) => {
-    const current = override ?? { file, tags, sourceUrl, vertical, demoId: selectedScenarioId };
-    const { file: runFile, tags: runTags, sourceUrl: runUrl, vertical: runVertical, demoId } = current;
+    const current = override ?? { file, tags, sourceUrl, vertical, demoId: selectedScenarioId, eventPlan };
+    const {
+      file: runFile,
+      tags: runTags,
+      sourceUrl: runUrl,
+      vertical: runVertical,
+      demoId,
+      eventPlan: runEventPlan,
+    } = current;
     setError(null);
     setResult(null);
 
-    if (!runFile && !runUrl.trim() && !runTags.trim()) {
-      setError('Select a demo scenario or add a brief/URL/tags before running.');
+    const hasEventContext = Boolean(runEventPlan.featuredTalent.trim() || runEventPlan.hosts.trim() || runEventPlan.tone.trim());
+    if (!runFile && !runUrl.trim() && !runTags.trim() && !hasEventContext) {
+      setError('Select a demo scenario or add a brief, URL, tags, or event talent/host/tone before running.');
       return;
     }
     if (runFile && runUrl.trim()) {
@@ -1092,6 +1216,7 @@ export default function App() {
           body: JSON.stringify({
             vertical: runVertical,
             tags: runTags.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean),
+            eventPlan: runEventPlan,
             demoScenarioId: demoId,
           }),
         });
@@ -1197,6 +1322,8 @@ export default function App() {
         body: JSON.stringify({
           vertical: runVertical,
           tags: runTags.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean),
+          eventPlan: runEventPlan,
+          location: runEventPlan.location || undefined,
           sourceUrl: runUrl.trim() || undefined,
           uploadPath: uploadedPath ?? undefined,
           fileData: fileDataPayload,
@@ -1250,6 +1377,7 @@ export default function App() {
           result.resolvedTags ??
           tags.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean),
         location,
+        eventPlan,
       }),
     });
     const payload = await readApiResponse(response, 'Promoter analysis service');
@@ -1287,6 +1415,11 @@ export default function App() {
             detach();
             setTags(next);
           }}
+          eventPlan={eventPlan}
+          onEventPlanChange={(next) => {
+            detach();
+            setEventPlan(next);
+          }}
           sourceUrl={sourceUrl}
           onSourceUrlChange={(next) => {
             detach();
@@ -1302,6 +1435,11 @@ export default function App() {
         <EvidencePanel result={result} health={health} />
         <ReportPanel result={result} error={error} stage={stage} />
       </div>
+      {result && hasEventPlanningInput(eventPlan) && (
+        <div className="border-t border-[#1F222F] bg-[#0D0E12] p-3 sm:p-5 xl:p-7">
+          <EventForecastPanel forecast={result.eventForecast} label={result.eventForecast?.label ?? eventPlan.demoLabel} />
+        </div>
+      )}
       {result?.promoterROI ? (
         <div className="border-t border-[#1F222F] bg-[#0D0E12] p-3 sm:p-5 xl:p-7">
           <PromoterROIConsole
@@ -1312,10 +1450,10 @@ export default function App() {
         </div>
       ) : result?.mode === 'fixture' ? (
         <PromoterROIUnavailable
-          canGenerate={Boolean(health?.qloo && health.gemini)}
+          canGenerate={Boolean(health?.qloo && health.analysisModel)}
           onGenerate={refreshPromoterROI}
         />
-      ) : result?.promoterROIStatus && result.promoterROIStatus !== 'complete' ? (
+      ) : result?.promoterROIStatus === 'failed' ? (
         <div role="status" className="border-t border-[#1F222F] bg-[#101116] p-4 text-center text-xs text-amber-200">
           Promoter ROI data could not be generated for this analysis. The cultural evidence and report above remain available.
         </div>

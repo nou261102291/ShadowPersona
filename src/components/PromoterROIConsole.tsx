@@ -10,7 +10,7 @@ import {
 
 const FALLBACK_NOTICE =
   'Live location context data metrics currently unavailable. Defaulting simulation pipeline to baseline subcultural ontological presets.';
-const locations = promoterLocationSchema.options;
+const suggestedLocations = ['San Francisco, CA', 'Oakland, CA', 'Los Angeles, CA', 'New York, NY', 'London, UK'];
 const money = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -129,6 +129,7 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
   const [location, setLocation] = useState<PromoterLocation>(() =>
     parsed.success ? parsed.data.location : 'San Francisco, CA',
   );
+  const [locationDraft, setLocationDraft] = useState(location);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [expandedPitch, setExpandedPitch] = useState<string | null>(null);
@@ -146,14 +147,22 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
   const degraded = report.comparisonStatus !== 'complete';
 
   const refreshLocation = async (next: PromoterLocation) => {
-    if (next === location || isRefreshing) return;
-    setLocation(next);
+    if (isRefreshing) return;
+    const parsedLocation = promoterLocationSchema.safeParse(next);
+    if (!parsedLocation.success) {
+      setRefreshError('Enter a city or market name between 2 and 120 characters.');
+      return;
+    }
+    if (parsedLocation.data === location) return;
+    setLocation(parsedLocation.data);
+    setLocationDraft(parsedLocation.data);
     setIsRefreshing(true);
     setRefreshError(null);
     try {
-      await onLocationChange(next);
+      await onLocationChange(parsedLocation.data);
     } catch (cause) {
       setLocation(report.location);
+      setLocationDraft(report.location);
       setRefreshError(cause instanceof Error ? cause.message : 'The location analysis could not be refreshed.');
     } finally {
       setIsRefreshing(false);
@@ -224,21 +233,33 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[10px] text-slate-500">Target venue market</span>
-              <select
-                value={location}
-                disabled={isRefreshing}
-                onChange={(event) => {
-                  const result = promoterLocationSchema.safeParse(event.target.value);
-                  if (result.success) void refreshLocation(result.data);
-                }}
-                className="h-10 w-full rounded-lg border border-[#1F222F] bg-[#0D0E12] px-3 text-xs text-white outline-none focus:border-indigo-400 disabled:opacity-60"
-              >
-                {locations.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <input
+                  list="promoter-market-options"
+                  value={locationDraft}
+                  disabled={isRefreshing}
+                  onChange={(event) => setLocationDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void refreshLocation(locationDraft);
+                    }
+                  }}
+                  className="h-10 min-w-0 flex-1 rounded-lg border border-[#1F222F] bg-[#0D0E12] px-3 text-xs text-white outline-none focus:border-indigo-400 disabled:opacity-60"
+                  aria-label="Target venue market"
+                />
+                <datalist id="promoter-market-options">
+                  {suggestedLocations.map((item) => <option key={item} value={item} />)}
+                </datalist>
+                <button
+                  type="button"
+                  disabled={isRefreshing || locationDraft.trim() === location}
+                  onClick={() => void refreshLocation(locationDraft)}
+                  className="rounded-lg border border-indigo-400/30 px-3 text-[10px] font-semibold text-indigo-200 disabled:opacity-50"
+                >
+                  Update
+                </button>
+              </div>
               {isRefreshing && <span className="mt-1 block text-[10px] text-indigo-300">Refreshing local market signals…</span>}
             </label>
             <div className="rounded-xl border border-lime-400/20 bg-lime-500/[0.04] p-4">

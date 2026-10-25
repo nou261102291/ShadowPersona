@@ -14,10 +14,15 @@ export default function PromoterROIUnavailable({ canGenerate, onGenerate }: Prom
   const [error, setError] = useState<string | null>(null);
 
   const generate = async () => {
+    const parsedLocation = promoterLocationSchema.safeParse(location);
+    if (!parsedLocation.success) {
+      setError('Enter a city or market name between 2 and 120 characters.');
+      return;
+    }
     setIsGenerating(true);
     setError(null);
     try {
-      await onGenerate(location);
+      await onGenerate(parsedLocation.data);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Promoter ROI data could not be generated.');
     } finally {
@@ -38,20 +43,18 @@ export default function PromoterROIUnavailable({ canGenerate, onGenerate }: Prom
         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="block w-full sm:max-w-xs">
             <span className="mb-1.5 block text-[10px] text-slate-500">Live market location</span>
-            <select
+            <input
+              list="promoter-roi-market-options"
               value={location}
-              onChange={(event) => {
-                const parsed = promoterLocationSchema.safeParse(event.target.value);
-                if (parsed.success) setLocation(parsed.data);
-              }}
+              onChange={(event) => setLocation(event.target.value)}
               className="h-10 w-full rounded-lg border border-[#1F222F] bg-[#0D0E12] px-3 text-xs text-white outline-none focus:border-indigo-400"
-            >
-              {promoterLocationSchema.options.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
+              aria-label="Live market location"
+            />
+            <datalist id="promoter-roi-market-options">
+              {['San Francisco, CA', 'Oakland, CA', 'Los Angeles, CA', 'New York, NY', 'London, UK'].map((option) => (
+                <option key={option} value={option} />
               ))}
-            </select>
+            </datalist>
           </label>
           <button
             type="button"

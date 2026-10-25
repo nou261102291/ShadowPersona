@@ -26,7 +26,7 @@ export function createAdminClient(): SupabaseClient {
     throw new ProviderError(
       'Gemini',
       503,
-      'The shared Gemini quota guard is not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY.',
+      'Shared analysis controls are not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY.',
     );
   }
 

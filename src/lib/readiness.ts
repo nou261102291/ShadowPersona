@@ -1,8 +1,9 @@
 export interface HealthStatus {
   supabase: boolean;
   qloo: boolean;
-  gemini: boolean;
-  geminiLimiter: boolean;
+  analysisModel: boolean;
+  analysisProvider: string;
+  analysisControls: boolean;
   tavily: boolean;
   live: boolean;
   fixtures: string[];
@@ -20,6 +21,7 @@ export interface ReadinessInput {
   fileError: string | null;
   tags: string;
   sourceUrl: string;
+  hasEventContext: boolean;
   demoScenarioId: string | null;
   health: HealthStatus | null;
 }
@@ -35,8 +37,8 @@ export function getReadiness(input: ReadinessInput): ReadinessItem[] {
     {
       id: 'input',
       label: 'Something to analyze',
-      ok: input.hasFile || Boolean(url) || hasTags,
-      fix: 'Load the demo data, upload a brief, paste a URL or add a few tags.',
+      ok: input.hasFile || Boolean(url) || hasTags || input.hasEventContext,
+      fix: 'Load the demo data, upload a brief, paste a URL, add a few tags, or enter event talent, host, or tone.',
     },
   ];
 
@@ -64,8 +66,8 @@ export function getReadiness(input: ReadinessInput): ReadinessItem[] {
     const missing = [
       !input.health.supabase && 'Supabase',
       !input.health.qloo && 'Qloo',
-      !input.health.gemini && 'Gemini',
-      !input.health.geminiLimiter && 'Gemini quota guard',
+      !input.health.analysisModel && input.health.analysisProvider,
+      !input.health.analysisControls && 'Shared analysis controls',
       Boolean(url) && !input.health.tavily && 'Tavily',
     ].filter(Boolean);
     items.push({

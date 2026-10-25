@@ -70,13 +70,17 @@ export default function OptimizationSuite({ optimizationData }: { optimizationDa
                   className="rounded-xl border-2 bg-[#0d0e12] p-4 shadow-[0_0_24px_rgba(37,99,235,0.12)]"
                   style={{ borderColor: BRAND_BLUE }}
                 >
-                  <p className="text-3xl font-bold tracking-tight text-white">{formatPrice(tier.price)}</p>
+                  <p className="text-3xl font-bold tracking-tight text-white">
+                    {tier.price === null ? 'Not entered' : formatPrice(tier.price)}
+                  </p>
                   <p className="mt-1 text-xs font-semibold text-blue-300">{tier.name}</p>
                   {tier.note && <p className="mt-1.5 text-[11px] leading-snug text-slate-500">{tier.note}</p>}
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-[10px] text-slate-600">Modelled recommendations, not sourced market prices.</p>
+            <p className="mt-2 text-[10px] text-slate-600">
+              Organizer plans show entered assumptions only; other runs show modelled recommendations, not sourced market prices.
+            </p>
           </div>
 
           <div>
@@ -118,10 +122,16 @@ export default function OptimizationSuite({ optimizationData }: { optimizationDa
           <div className="rounded-xl border border-blue-400/30 bg-gradient-to-br from-blue-500/15 to-transparent p-5 text-center">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-300">Estimated LTV multiplier</p>
             <p className="mt-1 text-5xl font-bold tracking-tight text-white">
-              {post.estimatedLtvMultiplier.toFixed(1)}
-              <span className="text-3xl text-blue-400">×</span>
+              {post.estimatedLtvMultiplier === null ? 'Not calculated' : (
+                <>
+                  {post.estimatedLtvMultiplier.toFixed(1)}
+                  <span className="text-3xl text-blue-400">×</span>
+                </>
+              )}
             </p>
-            <p className="mt-1 text-[10px] text-slate-500">Modelled estimate, not a measured result.</p>
+            <p className="mt-1 text-[10px] text-slate-500">
+              {post.estimatedLtvMultiplier === null ? 'No value is inferred for an organizer plan.' : 'Modelled estimate, not a measured result.'}
+            </p>
           </div>
 
           <div>

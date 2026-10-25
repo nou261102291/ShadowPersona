@@ -13,11 +13,14 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { buildPromoterROI, compareEvent, extractTags, optimizeEvent, writeReport } from '@/lib/providers/gemini';
 import { ProviderError } from '@/lib/providers/http';
-import { getArtistInsights, resolveTagIds } from '@/lib/providers/qloo';
+import { getArtistInsights, getBrandInsights, resolveTagIds } from '@/lib/providers/qloo';
 import { providerStatus, readFixture, recordFixture } from '@/lib/demoServer';
+import { getAnalysisModelCacheIdentity } from '@/lib/providers/modelConfig';
 import { extractUrl, searchHistoricalContext } from '@/lib/providers/tavily';
+import { calculateEventForecast, hasEventPlanningInput } from '@/lib/eventPlanning';
 import {
   promoterLocationSchema,
+  eventPlanSchema,
   simulationResponseSchema,
   type PromoterROIData,
   type ResearchSource,
@@ -47,7 +50,8 @@ const requestSchema = z.object({
   uploadPath: z.string().min(1).max(512).optional(),
   originalFileName: z.string().min(1).max(255).optional(),
   demoScenarioId: z.string().regex(/^[a-z0-9-]+$/).max(64).optional(),
-  location: promoterLocationSchema.default('San Francisco, CA'),
+  location: promoterLocationSchema.optional(),
+  eventPlan: eventPlanSchema.optional(),
   fileData: z
     .object({
       name: z.string().min(1).max(255),
@@ -60,8 +64,13 @@ const requestSchema = z.object({
     const hasSource = Boolean(value.sourceUrl);
     const hasUpload = Boolean(value.uploadPath) || Boolean(value.fileData);
     const hasTags = value.tags.length > 0;
+    const hasEventContext = [
+      value.eventPlan?.featuredTalent,
+      value.eventPlan?.hosts,
+      value.eventPlan?.tone,
+    ].some((part) => Boolean(part?.trim()));
     if (hasSource && hasUpload) return false;
-    return hasSource || hasUpload || hasTags;
+    return hasSource || hasUpload || hasTags || hasEventContext;
   },
   {
     message: 'Provide at least one input: an uploaded brief, a URL, or cultural tags.',
@@ -81,10 +90,14 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid simulation input.', details: parsed.error.issues }, { status: 400 });
   }
+  const searchLocation = parsed.data.eventPlan
+    ? parsed.data.eventPlan.location || undefined
+    : parsed.data.location || 'San Francisco, CA';
+  const roiLocation = searchLocation ?? 'Location not specified';
 
   // Offline demo: replay a recorded real response when live providers are not configured.
   const providers = providerStatus();
-  const liveReady = providers.qloo && providers.gemini && isSupabaseAdminConfigured();
+  const liveReady = providers.qloo && providers.analysisModel && isSupabaseAdminConfigured();
   if (parsed.data.demoScenarioId && !liveReady) {
     const fixture = await readFixture(parsed.data.demoScenarioId);
     if (fixture) return NextResponse.json({ ...fixture, mode: 'fixture' });
@@ -95,7 +108,7 @@ export async function POST(request: Request) {
   }
   if (!isSupabaseAdminConfigured()) {
     return NextResponse.json(
-      { error: 'The shared Gemini quota guard is not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY.' },
+      { error: 'Shared analysis controls are not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY and apply the latest migration.' },
       { status: 503 },
     );
   }
@@ -170,15 +183,15 @@ export async function POST(request: Request) {
       ? createHash('sha256').update(upload.base64).digest('hex')
       : null;
     const cacheIdentity = createSimulationCacheIdentity(sessionId, {
-      version: 3,
+      version: 7,
       vertical: parsed.data.vertical,
       tags: parsed.data.tags.map((tag) => tag.trim().toLowerCase()).sort(),
       sourceUrl: parsed.data.sourceUrl ?? null,
       fileContentHash,
-      location: parsed.data.location,
+      location: searchLocation ?? null,
+      eventPlan: parsed.data.eventPlan ?? null,
       demoScenarioId: parsed.data.demoScenarioId ?? null,
-      geminiModel: process.env.GEMINI_MODEL_ID ?? null,
-      geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL_ID ?? null,
+      analysisModel: getAnalysisModelCacheIdentity(),
       tavilyEnabled: providers.tavily,
     });
     const cacheClaim = await claimSimulationCache(cacheIdentity);
@@ -216,18 +229,50 @@ export async function POST(request: Request) {
       extractedTags = await extractTags({
         file: upload ? { mimeType: upload.mimeType, base64: upload.base64 } : undefined,
         webText,
+        eventPlan: parsed.data.eventPlan,
       });
     }
 
-    const tags = [...new Set([...parsed.data.tags, ...extractedTags].map((tag) => tag.trim()).filter(Boolean))].slice(0, 20);
+    const eventDescriptors =
+      parsed.data.tags.length === 0
+        ? [
+            parsed.data.eventPlan?.featuredTalent,
+            parsed.data.eventPlan?.hosts,
+            parsed.data.eventPlan?.tone,
+          ]
+            .flatMap((value) => value?.split(/[,;\n]/) ?? [])
+            .map((tag) => tag.trim().slice(0, 80))
+            .filter(Boolean)
+            .slice(0, 5)
+        : [];
+    const tags = [...new Set([...parsed.data.tags, ...eventDescriptors, ...extractedTags].map((tag) => tag.trim()).filter(Boolean))].slice(0, 20);
     const resolved = await resolveTagIds(tags);
     if (resolved.length === 0) {
       return NextResponse.json({ error: 'None of the descriptors matched a Qloo tag. Try different genre or mood tags.' }, { status: 422 });
     }
 
-    const evidence = await getArtistInsights(resolved.map((tag) => tag.id));
+    const tagIds = resolved.map((tag) => tag.id);
+    const [artistResult, brandResult] = await Promise.allSettled([
+      getArtistInsights(tagIds),
+      getBrandInsights(tagIds),
+    ]);
+    if (artistResult.status === 'rejected') throw artistResult.reason;
+    const evidence = artistResult.value;
     if (evidence.length === 0) {
       return NextResponse.json({ error: 'Qloo returned no matches for these descriptors.' }, { status: 422 });
+    }
+    const brandEvidenceStatus =
+      brandResult.status === 'rejected'
+        ? 'failed'
+        : brandResult.value.length > 0
+          ? 'complete'
+          : 'empty';
+    const brandEvidence = brandResult.status === 'fulfilled' ? brandResult.value : [];
+    if (brandResult.status === 'rejected') {
+      console.error(
+        'Qloo brand insights were unavailable',
+        brandResult.reason instanceof Error ? brandResult.reason.message : 'unknown error',
+      );
     }
 
     const resolvedNames = resolved.map((tag) => tag.name);
@@ -238,10 +283,10 @@ export async function POST(request: Request) {
       query: null,
     };
     const historicalPromise = providerStatus().tavily
-      ? searchHistoricalContext(resolvedNames, parsed.data.location)
+      ? searchHistoricalContext(resolvedNames, searchLocation, parsed.data.eventPlan)
       : Promise.resolve(emptyHistorical);
     const [reportResult, historicalResult] = await Promise.allSettled([
-      writeReport({ tags: resolvedNames, evidence }),
+      writeReport({ tags: resolvedNames, evidence, eventPlan: parsed.data.eventPlan }),
       historicalPromise,
     ]);
     if (reportResult.status === 'rejected') throw reportResult.reason;
@@ -263,24 +308,32 @@ export async function POST(request: Request) {
       );
     }
 
+    const shouldGeneratePromoterROI = !parsed.data.eventPlan || !hasEventPlanningInput(parsed.data.eventPlan);
+    const shouldGenerateComparison =
+      comparisonStatus === 'complete' &&
+      (!parsed.data.eventPlan || !hasEventPlanningInput(parsed.data.eventPlan));
     const [comparisonResult, optimizationResult, promoterROIResult] = await Promise.allSettled([
-      comparisonStatus === 'complete'
+      shouldGenerateComparison
         ? compareEvent({
             tags: resolvedNames,
             evidence,
             historicalContext: historical.compacted,
             briefText: webText,
+            eventPlan: parsed.data.eventPlan,
           })
         : Promise.resolve(undefined),
-      optimizeEvent({ tags: resolvedNames, evidence, historicalContext: historical.compacted }),
-      buildPromoterROI({
-        location: parsed.data.location,
-        tags: resolvedNames,
-        evidence,
-        historicalContext: historical.compacted,
-        benchmarks: historical.benchmarks,
-        comparisonStatus,
-      }),
+      optimizeEvent({ tags: resolvedNames, evidence, historicalContext: historical.compacted, eventPlan: parsed.data.eventPlan }),
+      shouldGeneratePromoterROI
+        ? buildPromoterROI({
+            location: roiLocation,
+            tags: resolvedNames,
+            evidence,
+            historicalContext: historical.compacted,
+            benchmarks: historical.benchmarks,
+            comparisonStatus,
+            eventPlan: parsed.data.eventPlan,
+          })
+        : Promise.resolve(undefined),
     ]);
 
     let comparison;
@@ -300,35 +353,46 @@ export async function POST(request: Request) {
 
     let promoterROI: PromoterROIData | undefined;
     let promoterROIStatus: 'complete' | 'failed' | 'skipped' = 'skipped';
-    if (promoterROIResult.status === 'fulfilled') {
-      promoterROI = promoterROIResult.value;
-      promoterROIStatus = 'complete';
-    } else {
-      promoterROIStatus = 'failed';
-      console.error(
-        'Promoter ROI analysis failed',
-        promoterROIResult.reason instanceof Error ? promoterROIResult.reason.message : 'unknown error',
-      );
+    if (shouldGeneratePromoterROI) {
+      if (promoterROIResult.status === 'fulfilled' && promoterROIResult.value) {
+        promoterROI = promoterROIResult.value;
+        promoterROIStatus = 'complete';
+      } else if (promoterROIResult.status === 'rejected') {
+        promoterROIStatus = 'failed';
+        console.error(
+          'Promoter ROI analysis failed',
+          promoterROIResult.reason instanceof Error ? promoterROIResult.reason.message : 'unknown error',
+        );
+      }
     }
 
     const response = simulationResponseSchema.parse({
       summary,
       evidence,
+      brandEvidence,
+      brandEvidenceStatus,
       report,
       sources,
       resolvedTags: resolved.map((tag) => tag.name),
       comparison,
-      comparisonStatus,
+      comparisonStatus: comparison
+        ? 'complete'
+        : shouldGenerateComparison && comparisonStatus === 'failed'
+          ? 'failed'
+          : 'skipped',
       optimization,
       promoterROI,
       promoterROIStatus,
+      eventForecast: parsed.data.eventPlan
+        ? calculateEventForecast(parsed.data.eventPlan)
+        : undefined,
       mode: 'live',
     });
     if (parsed.data.demoScenarioId && process.env.RECORD_DEMO_FIXTURES === '1') {
       await recordFixture(parsed.data.demoScenarioId, { ...response, mode: undefined });
     }
     const completeRun =
-      response.promoterROIStatus === 'complete' &&
+      response.promoterROIStatus !== 'failed' &&
       response.optimization !== undefined &&
       response.comparisonStatus !== 'failed';
     if (activeCacheClaim && completeRun) {
@@ -345,7 +409,7 @@ export async function POST(request: Request) {
     return NextResponse.json(response);
   } catch (error) {
     if (error instanceof ProviderError) {
-      const status = error.status === 429 ? 429 : error.status === 503 ? 503 : 502;
+      const status = error.status === 429 || error.status === 422 ? error.status : error.status === 503 ? 503 : 502;
       return NextResponse.json({ error: error.message }, { status });
     }
     console.error('Simulation failed', error instanceof Error ? error.message : 'unknown error');

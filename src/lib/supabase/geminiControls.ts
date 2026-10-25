@@ -59,7 +59,7 @@ function controlError(operation: string, detail: string): ProviderError {
   return new ProviderError(
     'Gemini',
     503,
-    'Shared Gemini quota controls are unavailable. Apply the latest Supabase migration and verify the server role key.',
+    'Shared analysis controls are unavailable. Apply the latest Supabase migration and verify the server role key.',
   );
 }
 

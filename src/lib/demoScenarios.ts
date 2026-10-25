@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { eventPlanSchema } from '@/types/shadowpersona';
 import manifest from '../../resources/demo/manifest.json';
 
 export const demoScenarioSchema = z.object({
@@ -12,6 +13,7 @@ export const demoScenarioSchema = z.object({
   sourceUrl: z.string(),
   file: z.string().regex(/^[\w.-]*$/),
   rationale: z.string(),
+  eventPlan: eventPlanSchema.optional(),
 });
 
 export type DemoScenario = z.infer<typeof demoScenarioSchema>;

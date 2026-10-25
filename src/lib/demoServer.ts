@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { simulationResponseSchema, type SimulationResponse } from '@/types/shadowpersona';
 import { findDemoScenario } from './demoScenarios';
+import { getAnalysisModelProviderLabel, isAnalysisModelConfigured } from './providers/modelConfig';
 
 const demoDir = path.join(process.cwd(), 'resources', 'demo');
 
@@ -12,7 +13,8 @@ export function providerStatus() {
   };
   return {
     qloo: has('QLOO_API_KEY'),
-    gemini: has('GEMINI_API_KEY') && has('GEMINI_MODEL_ID'),
+    analysisModel: isAnalysisModelConfigured(),
+    analysisProvider: getAnalysisModelProviderLabel(),
     tavily: has('TAVILY_API_KEY'),
   };
 }

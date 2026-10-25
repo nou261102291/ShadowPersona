@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   httpUrlSchema,
   type CompetitiveBenchmark,
+  type EventPlan,
   type PromoterLocation,
   type ResearchSource,
 } from '@/types/shadowpersona';
@@ -70,13 +71,26 @@ interface HistoricalSearch {
 export async function searchHistoricalContext(
   tags: string[],
   location?: PromoterLocation,
+  eventPlan?: EventPlan,
 ): Promise<HistoricalSearch & { query: string | null }> {
-  const metrics = 'ticket sales attendance revenue sponsorship';
-  const locale = location ? ` ${location}` : '';
+  const eventType =
+    eventPlan?.eventType === 'music-festival'
+      ? 'music festival'
+      : eventPlan?.eventType === 'comedy-show'
+        ? 'comedy show'
+        : 'concert tour';
+  const talent = eventPlan?.featuredTalent.trim();
+  const organizer = eventPlan?.organizerName.trim();
+  const locale = location ? ` in ${location}` : '';
+  const subject = [talent, organizer, tags.slice(0, 2).join(' ')].filter(Boolean).join(' ');
+  const hasOrganizerBrief = Boolean(talent || organizer || eventPlan?.demoLabel || eventPlan?.location || eventPlan?.eventDate);
   const queries = [
-    `${tags.slice(0, 3).join(' ')} album launch event${locale} ticket prices ${metrics}`,
-    `${tags[0] ?? 'music'} concert${locale} ticket prices attendance`,
-    `live music concert${locale} ticket price benchmark`,
+    ...(hasOrganizerBrief
+      ? [`${talent || subject || eventType}${locale} public aggregate social audience reach and event engagement`]
+      : []),
+    `${subject || eventType} ${eventType}${locale} reported ticket prices attendance venue capacity`,
+    `${eventType}${locale} ticket sales attendance revenue sponsorship benchmarks`,
+    ...(!hasOrganizerBrief ? [`${talent || tags[0] || eventType}${locale} public aggregate social audience reach event engagement`] : []),
   ].filter((query, index, all) => all.indexOf(query) === index);
 
   for (const query of queries) {

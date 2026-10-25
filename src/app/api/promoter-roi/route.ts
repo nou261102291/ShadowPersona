@@ -8,6 +8,8 @@ import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { providerStatus } from '@/lib/demoServer';
 import { searchHistoricalContext } from '@/lib/providers/tavily';
 import { isSupabaseAdminConfigured } from '@/lib/supabase/admin';
+import { getAnalysisModelCacheIdentity } from '@/lib/providers/modelConfig';
+import { hasEventPlanningInput } from '@/lib/eventPlanning';
 import {
   claimSimulationCache,
   completeSimulationCache,
@@ -15,13 +17,14 @@ import {
   releaseSimulationClaim,
   type SimulationCacheClaim,
 } from '@/lib/supabase/geminiControls';
-import { promoterLocationSchema, promoterROIDataSchema } from '@/types/shadowpersona';
+import { eventPlanSchema, promoterLocationSchema, promoterROIDataSchema } from '@/types/shadowpersona';
 
 export const maxDuration = 300;
 
 const requestSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(80)).min(1).max(20),
   location: promoterLocationSchema,
+  eventPlan: eventPlanSchema.optional(),
 });
 
 export async function POST(request: Request) {
@@ -36,15 +39,25 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid promoter analysis input.', details: parsed.error.issues }, { status: 400 });
   }
+  if (parsed.data.eventPlan && hasEventPlanningInput(parsed.data.eventPlan)) {
+    return NextResponse.json(
+      { error: 'Model-generated pricing projections are disabled for organizer plans. Enter assumptions and use the deterministic event forecast.' },
+      { status: 422 },
+    );
+  }
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: 'Supabase is not configured on the server.' }, { status: 503 });
   }
   if (!isSupabaseAdminConfigured()) {
     return NextResponse.json(
-      { error: 'The shared Gemini quota guard is not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY.' },
+      { error: 'Shared analysis controls are not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY and apply the latest migration.' },
       { status: 503 },
     );
+  }
+  const providers = providerStatus();
+  if (!providers.analysisModel) {
+    return NextResponse.json({ error: `${providers.analysisProvider} is not configured on the server.` }, { status: 503 });
   }
 
   const supabase = await createClient();
@@ -61,12 +74,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'A private demo session could not be verified. Reload and try again.' }, { status: 401 });
   }
   const cacheIdentity = createSimulationCacheIdentity(ownerId, {
-    version: 2,
+    version: 4,
     tags: parsed.data.tags.map((tag) => tag.trim().toLowerCase()).sort(),
     location: parsed.data.location,
-    geminiModel: process.env.GEMINI_MODEL_ID ?? null,
-    geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL_ID ?? null,
-    tavilyEnabled: providerStatus().tavily,
+    eventPlan: parsed.data.eventPlan ?? null,
+    analysisModel: getAnalysisModelCacheIdentity(),
+    tavilyEnabled: providers.tavily,
   });
   let activeCacheClaim: SimulationCacheClaim | undefined;
   let cacheStored = false;
@@ -107,9 +120,9 @@ export async function POST(request: Request) {
       query: null,
     };
     let comparisonStatus: 'complete' | 'failed' | 'skipped' = 'skipped';
-    if (providerStatus().tavily) {
+    if (providers.tavily) {
       try {
-        historical = await searchHistoricalContext(tags, parsed.data.location);
+        historical = await searchHistoricalContext(tags, parsed.data.location, parsed.data.eventPlan);
         comparisonStatus = historical.compacted ? 'complete' : 'skipped';
       } catch (error) {
         comparisonStatus = 'failed';
@@ -123,6 +136,7 @@ export async function POST(request: Request) {
       historicalContext: historical.compacted,
       benchmarks: historical.benchmarks,
       comparisonStatus,
+      eventPlan: parsed.data.eventPlan,
     }));
     if (comparisonStatus !== 'failed' && activeCacheClaim) {
       try {
@@ -135,7 +149,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ProviderError) {
-      const status = error.status === 429 ? 429 : error.status === 503 ? 503 : 502;
+      const status = error.status === 429 || error.status === 422 ? error.status : error.status === 503 ? 503 : 502;
       return NextResponse.json({ error: error.message }, { status });
     }
     console.error('Promoter ROI refresh failed', error instanceof Error ? error.message : 'unknown error');

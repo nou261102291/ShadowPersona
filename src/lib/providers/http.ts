@@ -84,10 +84,12 @@ export async function fetchWithBackoff(
   {
     retries = 3,
     baseDelayMs = 1000,
+    timeoutMs = 60_000,
     acquireRequest,
   }: {
     retries?: number;
     baseDelayMs?: number;
+    timeoutMs?: number;
     acquireRequest?: () => Promise<() => Promise<void>>;
   } = {},
 ): Promise<Response> {
@@ -95,7 +97,7 @@ export async function fetchWithBackoff(
     let response: Response;
     const releaseRequest = acquireRequest ? await acquireRequest() : undefined;
     try {
-      response = await fetch(url, { ...init, signal: AbortSignal.timeout(60_000) });
+      response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
     } catch {
       if (attempt >= retries) throw new ProviderError(provider, 504, `${provider} request failed or timed out.`);
       await new Promise((resolve) => setTimeout(resolve, baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs));
