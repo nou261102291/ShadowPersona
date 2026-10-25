@@ -25,6 +25,7 @@ const requestSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(80)).min(1).max(20),
   location: promoterLocationSchema,
   eventPlan: eventPlanSchema.optional(),
+  enableWebResearch: z.boolean().default(false),
 });
 
 export async function POST(request: Request) {
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
     );
   }
   const providers = providerStatus();
+  const tavilySearchEnabled = parsed.data.enableWebResearch && providers.tavily;
   if (!providers.analysisModel) {
     return NextResponse.json({ error: `${providers.analysisProvider} is not configured on the server.` }, { status: 503 });
   }
@@ -74,12 +76,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'A private demo session could not be verified. Reload and try again.' }, { status: 401 });
   }
   const cacheIdentity = createSimulationCacheIdentity(ownerId, {
-    version: 4,
+    version: 5,
     tags: parsed.data.tags.map((tag) => tag.trim().toLowerCase()).sort(),
     location: parsed.data.location,
     eventPlan: parsed.data.eventPlan ?? null,
     analysisModel: getAnalysisModelCacheIdentity(),
-    tavilyEnabled: providers.tavily,
+    tavilyEnabled: tavilySearchEnabled,
   });
   let activeCacheClaim: SimulationCacheClaim | undefined;
   let cacheStored = false;
@@ -120,7 +122,7 @@ export async function POST(request: Request) {
       query: null,
     };
     let comparisonStatus: 'complete' | 'failed' | 'skipped' = 'skipped';
-    if (providers.tavily) {
+    if (tavilySearchEnabled) {
       try {
         historical = await searchHistoricalContext(tags, parsed.data.location, parsed.data.eventPlan);
         comparisonStatus = historical.compacted ? 'complete' : 'skipped';

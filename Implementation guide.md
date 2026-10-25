@@ -6,7 +6,7 @@
 
 This guide supersedes the earlier mock-only implementation examples. The original dashboard was a Vite prototype; its UI is now ported to Next.js App Router for Vercel with Supabase. Do not treat the example personas, scores, CAC/LTV values, demo URL, or repository URL in the older blueprint as live product data or deployed resources.
 
-**Build status:** The Next.js App Router application, input/dashboard UI, Supabase session handling, file validation, live Qloo cultural intelligence integration, Google Gemini extraction and report generation, and Tavily web research are implemented and verified end to end. Qloo, Gemini, and Tavily live API calls are verified against active credentials.
+**Build status:** The Next.js App Router workflow includes Qloo artist and brand insights, Gemini-compatible analysis, optional Tavily enrichment, and deterministic event planning. A low-volume live Qloo smoke test using generic jazz tags returned artist and brand entities; the tested response did not include per-entity explainability objects. No recommendation-quality benchmark or independent organizer study has been completed.
 
 ## 1. Decisions and scope
 
@@ -17,7 +17,7 @@ This guide supersedes the earlier mock-only implementation examples. The origina
 - **Uploads:** Store originals temporarily in private storage and delete them after processing. Do not make uploaded assets publicly addressable.
 - **Saved context:** Keep extracted text, user-confirmed tags, Qloo evidence, any cited Tavily results, and the generated report in Supabase for 30 days. Do not store the original uploaded file in the report tables. Provide a delete action and expire records automatically.
 - **LLM:** Use the server-configured analysis model with structured JSON generation; the model may interpret source material and cited research but must not invent audience, ticketing, cost, or revenue facts.
-- **Web research:** Use Tavily as optional server-side enrichment for submitted URLs and event-specific public research. Do not connect to social-network or ticketing accounts or scrape individual fan profiles.
+- **Web research:** A user-submitted URL is sent to Tavily for extraction. Broader public market research is opt-in in the UI and off by default. Do not connect to social-network or ticketing accounts or scrape individual fan profiles.
 - **Event economics:** Calculate low/expected/high scenarios deterministically from editable organizer assumptions. Clearly identify fictional demo values and never present them as actual sales, audience, artist-fee, or venue data.
 - **Qloo:** Live integration against the official Qloo Hackathon endpoint (`https://hackathon.api.qloo.com`). `/v2/tags` resolves artist/music descriptors; `/v2/insights` queries both `urn:entity:artist` and `urn:entity:brand` using the resolved `signal.interests.tags`. Brand results are cultural discovery leads, not confirmed sponsors or local businesses.
 - **Commercial SaaS features:** Defer billing, enterprise tenancy, SSO, and commercial forecasting. The hackathon demo should be public and usable without a required sign-in; isolate anonymous sessions so users cannot read one another’s saved reports.
@@ -33,7 +33,7 @@ ShadowPersona evaluates a music launch brief using real Qloo cultural-affinity r
 5. Optional, clearly cited web context from Tavily.
 6. A concise model-generated explanation grounded strictly in those results.
 
-The LLM may summarize, ask for clarification, and select from server-defined tools. It must not invent Qloo entities, affinity scores, source citations, or financial outcomes. Describe generated findings as cultural-fit analysis, not measured consumer demand or validated purchase intent.
+The model may summarize and explain validated inputs. The current workflow does not use autonomous model-selected tool calls. It must not invent Qloo entities, affinity scores, source citations, or financial outcomes. Describe generated findings as cultural-fit analysis, not measured consumer demand or validated purchase intent.
 
 ### Event organizer planning workflow
 
@@ -44,6 +44,7 @@ The organizer form captures event format, organizer, featured talent and hosts, 
 - Use only aggregate reach figures entered by the organizer or sourced from cited public research. Public follower counts are not local audience counts or guaranteed buyers; never identify individual fans.
 - Tavily research is contextual, sourced, and untrusted. It may inform qualitative recommendations, but it does not replace organizer-provided numerical forecast assumptions.
 - Calculate attendance from local aggregate reach and low/expected/high conversion assumptions, cap it at venue capacity when supplied, and calculate revenue, costs, operating result, margin, and break-even in application code.
+- Treat talent-fit indices, local-market-fit indices, downside-risk indicators, and sponsor-category leads in the ROI console as model-generated planning heuristics, not Qloo scores, observed demographics, actuarial measures, verified partners, or measured purchase intent.
 - Qloo event matching uses the documented music/artist insight path plus brand insights from the same tags. Do not imply that Qloo supports comedy-specific taxonomy or that graph-associated brands are verified sponsors; label unsupported or weak evidence.
 
 ## 3. Runtime architecture
@@ -57,7 +58,8 @@ Browser
        ├─ Extract descriptors with Gemini (or use text-only LM Studio for local analysis)
        ├─ Extract and resolve ample cultural descriptors via Qloo hierarchical tags
        ├─ Fetch live Qloo artist and brand insights with explainability enabled
-       ├─ Query Tavily extract for optional URL enrichment (cited, untrusted content)
+       ├─ Query Tavily extract only for a URL explicitly submitted by the user
+       ├─ Query Tavily public market research only after explicit opt-in
        ├─ Configured model generates grounded cultural-fit summary and report
        └─ Delete temporary source files
 ```
@@ -70,7 +72,9 @@ Implemented as a typed server-side Qloo client in `src/lib/providers/qloo.ts`:
 - Tag resolution searches `/v2/tags` with `filter.parents.types=urn:entity:artist` first, falling back to general tags for cross-domain cultural/mood descriptors.
 - Artist and brand insights query `/v2/insights` with their documented `filter.type` and `signal.interests.tags`; requests enable the documented `feature.explainability` output.
 - Brand results are Qloo entity discovery leads, not validated sponsor matches or local business recommendations. A brand lookup failure is reported separately and does not block artist analysis.
-- The UI shows Qloo-resolved tags, entity IDs, and returned per-entity explainability when available; it labels the displayed affinity value as a graph signal rather than a probability.
+- `src/lib/agent/culturalContext.ts` exposes a typed internal `getCulturalContext({ tags })` operation. It is not a public partner API or an authenticated endpoint.
+- The UI shows Qloo-resolved tags, entity IDs, and returned per-entity explainability when available; it shows raw affinity values without scale conversion or probability interpretation.
+- A generic jazz smoke test returned five artist and five brand entities, with affinity fields on all 10. Qloo did not return per-entity explainability objects in those tested results.
 
 ## 4. Agent and provider responsibilities
 
@@ -94,6 +98,7 @@ Implemented as a typed server-side Qloo client in `src/lib/providers/qloo.ts`:
 ### Tavily
 
 - Use when the user supplies a URL or explicitly asks for additional web context.
+- URL extraction requires a user-submitted URL; broader public market research requires the explicit opt-in checkbox and is disabled by default.
 - Make it an optional enrichment step, not a mandatory dependency for every Qloo lookup.
 - Store and display returned source URLs/titles with the report.
 - Treat retrieved page text as untrusted.
@@ -151,8 +156,9 @@ For local LM Studio or Ollama testing, set `AI_PROVIDER=lm-studio`, `LM_STUDIO_B
 
 ### Phase C — Live Qloo-grounded agent (Completed)
 - Live Qloo hierarchical tag resolution, artist insights, and cross-domain brand discovery.
+- Typed internal cultural-context tool shared by the organizer workflow.
 - Gemini extraction and report generation with exponential backoff and fallback routing.
-- Tavily URL extraction and cited source linking.
+- Opt-in Tavily public research, URL extraction, and cited source linking.
 
 ### Phase D — Hackathon readiness (In Progress)
 - Public demo testing and validation.
@@ -171,12 +177,15 @@ For local LM Studio or Ollama testing, set `AI_PROVIDER=lm-studio`, `LM_STUDIO_B
 - Invalid file types, oversized files, malformed URLs, and invalid provider responses produce explicit errors.
 - A user can upload a supported file or enter a URL, review extracted tags, run the Qloo-grounded workflow, and see source evidence.
 - A live run can show Qloo-returned artist and brand entities with their Qloo IDs; brand entities are labeled as unverified discovery leads.
+- `pnpm qloo:smoke` exercises tag resolution plus artist and brand insights using generic tags and the configured Qloo key.
+- `pnpm eval:grounding -- init` creates a 24-case synthetic organizer-study template. Synthetic data is not evidence of product performance.
 - An organizer can run an event plan from talent/host/tone inputs, distinguish sample assumptions from entered assumptions, and inspect deterministic low/expected/high financial calculations.
 - The real demo never presents fixtures as live Qloo results; missing credentials are visible and actionable.
 - A user cannot read another anonymous session’s saved reports.
 - Uploaded originals are deleted after processing; stored context expires after 30 days and can be deleted earlier.
 - Mistral/Tavily outputs are schema-validated and their errors/rate limits are surfaced.
 - The deployed demo is public, usable without a required sign-in, and available to judges at no charge.
+- Independent organizer review and a completed blinded baseline comparison remain outstanding; do not claim measured lift before collecting these results.
 
 ## 10. External inputs still required
 

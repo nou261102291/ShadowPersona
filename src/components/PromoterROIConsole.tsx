@@ -9,7 +9,7 @@ import {
 } from '@/types/shadowpersona';
 
 const FALLBACK_NOTICE =
-  'Live location context data metrics currently unavailable. Defaulting simulation pipeline to baseline subcultural ontological presets.';
+  'Optional public market research was not included or could not be retrieved. Recommendations rely on Qloo cultural evidence and submitted assumptions; no live market metrics were established.';
 const suggestedLocations = ['San Francisco, CA', 'Oakland, CA', 'Los Angeles, CA', 'New York, NY', 'London, UK'];
 const money = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -111,14 +111,14 @@ function SupplyDemandChart({ data }: { data: PromoterROIData['pricing']['supplyD
 
 function sponsorshipPitch(match: PromoterROIData['sponsorshipMatches'][number], location: string): string {
   return [
-    `## Sponsorship opportunity: ${match.targetBrandCategory}`,
+    `## Sponsor category to validate: ${match.targetBrandCategory}`,
     '',
     `**Market:** ${location}`,
-    `**Audience affinity match:** ${match.audienceAffinityMatchPct}%`,
+    `**Modelled cultural-alignment index:** ${match.audienceAffinityMatchPct}/100 (heuristic, not a Qloo score or purchase-intent probability)`,
     '',
-    `**Evidence-led rationale:** ${match.justification}`,
+    `**Model-generated rationale:** ${match.justification}`,
     '',
-    '**Proposed next step:** Align a partner activation with the event audience profile, then validate reach and conversion through a measured pilot.',
+    '**Proposed next step:** Treat this as a research lead; verify the partner, local availability, audience fit, and commercial interest before outreach.',
   ].join('\n');
 }
 
@@ -193,7 +193,11 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
           <h2 className="mt-1 text-lg font-semibold text-white">Promoter ROI Console</h2>
         </div>
         <span className="rounded-full border border-indigo-400/20 bg-indigo-500/10 px-2.5 py-1 text-[10px] text-indigo-200">
-          Qloo + Tavily context
+          {report.comparisonStatus === 'complete'
+            ? 'Qloo + cited public research'
+            : report.comparisonStatus === 'failed'
+              ? 'Qloo · web research failed'
+              : 'Qloo · no web research'}
         </span>
       </header>
 
@@ -266,37 +270,41 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
               <p className="text-[9px] font-semibold uppercase tracking-wider text-lime-300">Talent Loss Protection Coefficient</p>
               <p className="mt-1 text-4xl font-bold tabular-nums text-lime-300">
                 {selectedProfile.lossProtectionCoefficientPct}
-                <span className="text-xl">%</span>
+                <span className="text-xl">/100</span>
               </p>
-              <p className="mt-1 text-[10px] text-slate-500">Modelled risk indicator only; not a guarantee or insurance measure.</p>
+              <p className="mt-1 text-[10px] text-slate-500">Modelled planning heuristic; not actuarial risk, a guarantee, or insurance.</p>
             </div>
           </div>
 
           <div className="space-y-4">
             <div>
-              <h4 className="text-xs font-semibold text-slate-200">Predictive Audience Alignment</h4>
+              <h4 className="text-xs font-semibold text-slate-200">Modelled Talent-Fit Heuristics</h4>
               <p className="mt-1 text-[10px] text-slate-500">{selectedProfile.artistName} · {location}</p>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg border border-[#1F222F] bg-[#0D0E12] p-3">
-                <p className="text-[9px] uppercase tracking-wider text-slate-500">Fan profile alignment</p>
-                <p className="mt-1 text-xl font-bold text-indigo-200">{selectedProfile.fanProfileAlignmentPct}%</p>
+                <p className="text-[9px] uppercase tracking-wider text-slate-500">Cultural-fit estimate</p>
+                <p className="mt-1 text-xl font-bold text-indigo-200">{selectedProfile.fanProfileAlignmentPct}/100</p>
               </div>
               <div className="rounded-lg border border-[#1F222F] bg-[#0D0E12] p-3">
-                <p className="text-[9px] uppercase tracking-wider text-slate-500">Local demographic overlap</p>
-                <p className="mt-1 text-xl font-bold text-indigo-200">{selectedProfile.localVenueDemographicAlignmentPct}%</p>
+                <p className="text-[9px] uppercase tracking-wider text-slate-500">Local-market fit estimate</p>
+                <p className="mt-1 text-xl font-bold text-indigo-200">{selectedProfile.localVenueDemographicAlignmentPct}/100</p>
               </div>
             </div>
+            <p className="text-[10px] leading-relaxed text-slate-500">
+              These are model-generated 0–100 planning heuristics based on the event brief and Qloo artist evidence. They
+              are not Qloo scores, measured demographics, audience overlap, attendance, or purchase intent.
+            </p>
             <ul className="space-y-2">
               {selectedProfile.alignmentBreakdown.map((item) => (
                 <li key={item.dimension}>
                   <div className="flex justify-between text-[10px]">
                     <span className="text-slate-400">{item.dimension}</span>
-                    <span className="font-semibold tabular-nums text-slate-200">{item.alignmentPct}%</span>
+                    <span className="font-semibold tabular-nums text-slate-200">{item.alignmentPct}/100</span>
                   </div>
                   <div
                     role="progressbar"
-                    aria-label={`${item.dimension} audience overlap`}
+                    aria-label={`${item.dimension} modelled index`}
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={item.alignmentPct}
@@ -309,7 +317,7 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
             </ul>
             {selectedProfile.localVenueDemographicAlignmentPct < 75 && (
               <div role="alert" className="rounded-lg border border-amber-400/50 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-100">
-                Operational Alert: Talent contract guarantee presents high vacancy risk for this target coordinate. Consider structured profit-share routing.
+                Planning prompt: the modelled local-market fit index is below the display threshold. Verify local audience reach and event economics with organizer data; this score does not establish vacancy risk.
               </div>
             )}
           </div>
@@ -382,11 +390,15 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
       <section className="overflow-hidden rounded-xl border border-[#1F222F] bg-[#101116]">
         <div className="border-b border-[#1F222F] px-4 py-3">
           <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-lime-300">Workflow step 03</p>
-          <h3 className="mt-1 text-sm font-semibold text-white">Corporate Sponsorship Arbitrage Ledger</h3>
+          <h3 className="mt-1 text-sm font-semibold text-white">Sponsor Category Research Leads</h3>
         </div>
         <div className="p-4 md:p-5">
+          <p className="mb-3 text-[10px] leading-relaxed text-slate-500">
+            Model-generated category hypotheses informed by the event context and artist evidence. These are not
+            Qloo-returned brands, verified sponsors, local availability checks, or measured purchase intent.
+          </p>
           {report.sponsorshipMatches.length === 0 ? (
-            <p className="text-xs text-slate-500">No defensible cross-domain sponsorship matches were available for this audience profile.</p>
+            <p className="text-xs text-slate-500">No sponsor-category research leads were generated for this run.</p>
           ) : (
             <>
               <div className="hidden overflow-x-auto md:block">
@@ -394,8 +406,8 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
                   <thead>
                     <tr className="border-b border-[#1F222F] text-[10px] uppercase tracking-wider text-slate-500">
                       <th className="px-3 py-2">Target Brand Category</th>
-                      <th className="px-3 py-2">Audience Affinity Match Factor</th>
-                      <th className="px-3 py-2">Data-Driven Justification</th>
+                      <th className="px-3 py-2">Modelled Alignment Index</th>
+                      <th className="px-3 py-2">Model-Generated Rationale</th>
                       <th className="px-3 py-2">Pitch Builder</th>
                     </tr>
                   </thead>
@@ -407,7 +419,7 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
                         <tr key={id} className="border-b border-[#1F222F]/70 align-top">
                           <td className="px-3 py-3 font-medium text-white">{match.targetBrandCategory}</td>
                           <td className={`px-3 py-3 font-bold tabular-nums ${match.audienceAffinityMatchPct > 85 ? 'text-lime-300' : 'text-indigo-200'}`}>
-                            {match.audienceAffinityMatchPct}%
+                            {match.audienceAffinityMatchPct}/100
                           </td>
                           <td className="px-3 py-3 leading-relaxed text-slate-400">{match.justification}</td>
                           <td className="px-3 py-3">
@@ -442,7 +454,7 @@ export default function PromoterROIConsole({ data, tags, onLocationChange }: Pro
                       <div className="flex items-start justify-between gap-3">
                         <h4 className="text-xs font-semibold text-white">{match.targetBrandCategory}</h4>
                         <span className={`text-xs font-bold ${match.audienceAffinityMatchPct > 85 ? 'text-lime-300' : 'text-indigo-200'}`}>
-                          {match.audienceAffinityMatchPct}%
+                          {match.audienceAffinityMatchPct}/100
                         </span>
                       </div>
                       <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{match.justification}</p>

@@ -7,7 +7,7 @@ const BRAND_BLUE = '#2563EB';
 const PANEL_BORDER = '#1F222F';
 
 const FALLBACK_NOTICE =
-  'Live location context data metrics currently unavailable. Defaulting simulation pipeline to baseline subcultural ontological presets.';
+  'Optional public market research was not included or could not be retrieved. Recommendations rely on Qloo cultural evidence and submitted assumptions; no live market metrics were established.';
 
 function formatPrice(value: number): string {
   return new Intl.NumberFormat('en-US', {

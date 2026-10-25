@@ -13,7 +13,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { buildPromoterROI, compareEvent, extractTags, optimizeEvent, writeReport } from '@/lib/providers/gemini';
 import { ProviderError } from '@/lib/providers/http';
-import { getArtistInsights, getBrandInsights, resolveTagIds } from '@/lib/providers/qloo';
+import { getCulturalContext } from '@/lib/agent/culturalContext';
 import { providerStatus, readFixture, recordFixture } from '@/lib/demoServer';
 import { getAnalysisModelCacheIdentity } from '@/lib/providers/modelConfig';
 import { extractUrl, searchHistoricalContext } from '@/lib/providers/tavily';
@@ -47,6 +47,7 @@ const requestSchema = z.object({
   vertical: z.enum(['music', 'hospitality']),
   tags: z.array(z.string().trim().min(1).max(80)).max(20),
   sourceUrl: z.url().max(2048).optional(),
+  enableWebResearch: z.boolean().default(false),
   uploadPath: z.string().min(1).max(512).optional(),
   originalFileName: z.string().min(1).max(255).optional(),
   demoScenarioId: z.string().regex(/^[a-z0-9-]+$/).max(64).optional(),
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
 
   // Offline demo: replay a recorded real response when live providers are not configured.
   const providers = providerStatus();
+  const tavilySearchEnabled = parsed.data.enableWebResearch && providers.tavily;
   const liveReady = providers.qloo && providers.analysisModel && isSupabaseAdminConfigured();
   if (parsed.data.demoScenarioId && !liveReady) {
     const fixture = await readFixture(parsed.data.demoScenarioId);
@@ -183,7 +185,7 @@ export async function POST(request: Request) {
       ? createHash('sha256').update(upload.base64).digest('hex')
       : null;
     const cacheIdentity = createSimulationCacheIdentity(sessionId, {
-      version: 7,
+      version: 8,
       vertical: parsed.data.vertical,
       tags: parsed.data.tags.map((tag) => tag.trim().toLowerCase()).sort(),
       sourceUrl: parsed.data.sourceUrl ?? null,
@@ -192,7 +194,7 @@ export async function POST(request: Request) {
       eventPlan: parsed.data.eventPlan ?? null,
       demoScenarioId: parsed.data.demoScenarioId ?? null,
       analysisModel: getAnalysisModelCacheIdentity(),
-      tavilyEnabled: providers.tavily,
+      tavilyEnabled: tavilySearchEnabled,
     });
     const cacheClaim = await claimSimulationCache(cacheIdentity);
     if (cacheClaim.outcome === 'cached') {
@@ -246,43 +248,26 @@ export async function POST(request: Request) {
             .slice(0, 5)
         : [];
     const tags = [...new Set([...parsed.data.tags, ...eventDescriptors, ...extractedTags].map((tag) => tag.trim()).filter(Boolean))].slice(0, 20);
-    const resolved = await resolveTagIds(tags);
-    if (resolved.length === 0) {
+    const culturalContext = await getCulturalContext({ tags });
+    if (culturalContext.resolvedTags.length === 0) {
       return NextResponse.json({ error: 'None of the descriptors matched a Qloo tag. Try different genre or mood tags.' }, { status: 422 });
     }
 
-    const tagIds = resolved.map((tag) => tag.id);
-    const [artistResult, brandResult] = await Promise.allSettled([
-      getArtistInsights(tagIds),
-      getBrandInsights(tagIds),
-    ]);
-    if (artistResult.status === 'rejected') throw artistResult.reason;
-    const evidence = artistResult.value;
+    const evidence = culturalContext.artistEvidence;
     if (evidence.length === 0) {
       return NextResponse.json({ error: 'Qloo returned no matches for these descriptors.' }, { status: 422 });
     }
-    const brandEvidenceStatus =
-      brandResult.status === 'rejected'
-        ? 'failed'
-        : brandResult.value.length > 0
-          ? 'complete'
-          : 'empty';
-    const brandEvidence = brandResult.status === 'fulfilled' ? brandResult.value : [];
-    if (brandResult.status === 'rejected') {
-      console.error(
-        'Qloo brand insights were unavailable',
-        brandResult.reason instanceof Error ? brandResult.reason.message : 'unknown error',
-      );
-    }
+    const brandEvidence = culturalContext.brandEvidence;
+    const brandEvidenceStatus = culturalContext.brandEvidenceStatus;
 
-    const resolvedNames = resolved.map((tag) => tag.name);
+    const resolvedNames = culturalContext.resolvedTags.map((tag) => tag.name);
     const emptyHistorical: Awaited<ReturnType<typeof searchHistoricalContext>> = {
       sources: [],
       benchmarks: [],
       compacted: '',
       query: null,
     };
-    const historicalPromise = providerStatus().tavily
+    const historicalPromise = tavilySearchEnabled
       ? searchHistoricalContext(resolvedNames, searchLocation, parsed.data.eventPlan)
       : Promise.resolve(emptyHistorical);
     const [reportResult, historicalResult] = await Promise.allSettled([
@@ -373,7 +358,7 @@ export async function POST(request: Request) {
       brandEvidenceStatus,
       report,
       sources,
-      resolvedTags: resolved.map((tag) => tag.name),
+      resolvedTags: culturalContext.resolvedTags.map((tag) => tag.name),
       comparison,
       comparisonStatus: comparison
         ? 'complete'

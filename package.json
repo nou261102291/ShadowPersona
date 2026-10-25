@@ -13,6 +13,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "qloo:smoke": "node --env-file=.env.local scripts/qloo-smoke.mjs",
+    "eval:grounding": "node scripts/grounding-eval.mjs",
     "format": "oxfmt",
     "demo:purge": "node scripts/purge-demo-cache.mjs"
   },

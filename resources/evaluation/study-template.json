@@ -1,0 +1,461 @@
+{
+  "studyDescription": "Synthetic event briefs for evaluator workflow setup. These are not real organizer interviews or measured model outputs.",
+  "cases": [
+    {
+      "id": "S01",
+      "brief": "Plan a ticketed showcase at a 250-person independent venue for an audience interested in jazz fusion. Cultural cues: modal jazz, improvisation, and electric textures. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "jazz fusion",
+        "modal jazz",
+        "improvisation",
+        "and electric textures"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S02",
+      "brief": "Plan a community concert at a 700-person civic arts venue for an audience interested in jazz fusion. Cultural cues: modal jazz, improvisation, and electric textures. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "jazz fusion",
+        "modal jazz",
+        "improvisation",
+        "and electric textures"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S03",
+      "brief": "Plan a weekend festival stage at an outdoor event with a 1,500-person capacity for an audience interested in jazz fusion. Cultural cues: modal jazz, improvisation, and electric textures. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "jazz fusion",
+        "modal jazz",
+        "improvisation",
+        "and electric textures"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S04",
+      "brief": "Plan a ticketed showcase at a 250-person independent venue for an audience interested in neo-soul. Cultural cues: warm vocals, intimate arrangements, and analog production. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "neo-soul",
+        "warm vocals",
+        "intimate arrangements",
+        "and analog production"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S05",
+      "brief": "Plan a community concert at a 700-person civic arts venue for an audience interested in neo-soul. Cultural cues: warm vocals, intimate arrangements, and analog production. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "neo-soul",
+        "warm vocals",
+        "intimate arrangements",
+        "and analog production"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S06",
+      "brief": "Plan a weekend festival stage at an outdoor event with a 1,500-person capacity for an audience interested in neo-soul. Cultural cues: warm vocals, intimate arrangements, and analog production. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "neo-soul",
+        "warm vocals",
+        "intimate arrangements",
+        "and analog production"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S07",
+      "brief": "Plan a ticketed showcase at a 250-person independent venue for an audience interested in indie rock. Cultural cues: guitar-led songwriting, dream pop, and atmospheric production. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "indie rock",
+        "guitar-led songwriting",
+        "dream pop",
+        "and atmospheric production"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S08",
+      "brief": "Plan a community concert at a 700-person civic arts venue for an audience interested in indie rock. Cultural cues: guitar-led songwriting, dream pop, and atmospheric production. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "indie rock",
+        "guitar-led songwriting",
+        "dream pop",
+        "and atmospheric production"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S09",
+      "brief": "Plan a weekend festival stage at an outdoor event with a 1,500-person capacity for an audience interested in indie rock. Cultural cues: guitar-led songwriting, dream pop, and atmospheric production. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "indie rock",
+        "guitar-led songwriting",
+        "dream pop",
+        "and atmospheric production"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S10",
+      "brief": "Plan a ticketed showcase at a 250-person independent venue for an audience interested in Afrobeats. Cultural cues: contemporary West African pop, rhythmic energy, and dance. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "Afrobeats",
+        "contemporary West African pop",
+        "rhythmic energy",
+        "and dance"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S11",
+      "brief": "Plan a community concert at a 700-person civic arts venue for an audience interested in Afrobeats. Cultural cues: contemporary West African pop, rhythmic energy, and dance. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "Afrobeats",
+        "contemporary West African pop",
+        "rhythmic energy",
+        "and dance"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S12",
+      "brief": "Plan a weekend festival stage at an outdoor event with a 1,500-person capacity for an audience interested in Afrobeats. Cultural cues: contemporary West African pop, rhythmic energy, and dance. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "Afrobeats",
+        "contemporary West African pop",
+        "rhythmic energy",
+        "and dance"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S13",
+      "brief": "Plan a ticketed showcase at a 250-person independent venue for an audience interested in ambient electronic. Cultural cues: slow textures, visual art, and an attentive listening environment. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "ambient electronic",
+        "slow textures",
+        "visual art",
+        "and an attentive listening environment"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S14",
+      "brief": "Plan a community concert at a 700-person civic arts venue for an audience interested in ambient electronic. Cultural cues: slow textures, visual art, and an attentive listening environment. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "ambient electronic",
+        "slow textures",
+        "visual art",
+        "and an attentive listening environment"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S15",
+      "brief": "Plan a weekend festival stage at an outdoor event with a 1,500-person capacity for an audience interested in ambient electronic. Cultural cues: slow textures, visual art, and an attentive listening environment. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "ambient electronic",
+        "slow textures",
+        "visual art",
+        "and an attentive listening environment"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S16",
+      "brief": "Plan a ticketed showcase at a 250-person independent venue for an audience interested in Americana. Cultural cues: acoustic songwriting, roots music, and a relaxed outdoor setting. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "Americana",
+        "acoustic songwriting",
+        "roots music",
+        "and a relaxed outdoor setting"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S17",
+      "brief": "Plan a community concert at a 700-person civic arts venue for an audience interested in Americana. Cultural cues: acoustic songwriting, roots music, and a relaxed outdoor setting. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "Americana",
+        "acoustic songwriting",
+        "roots music",
+        "and a relaxed outdoor setting"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S18",
+      "brief": "Plan a weekend festival stage at an outdoor event with a 1,500-person capacity for an audience interested in Americana. Cultural cues: acoustic songwriting, roots music, and a relaxed outdoor setting. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "Americana",
+        "acoustic songwriting",
+        "roots music",
+        "and a relaxed outdoor setting"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S19",
+      "brief": "Plan a ticketed showcase at a 250-person independent venue for an audience interested in punk and hardcore. Cultural cues: independent artists, high energy, and an all-ages community setting. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "punk and hardcore",
+        "independent artists",
+        "high energy",
+        "and an all-ages community setting"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S20",
+      "brief": "Plan a community concert at a 700-person civic arts venue for an audience interested in punk and hardcore. Cultural cues: independent artists, high energy, and an all-ages community setting. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "punk and hardcore",
+        "independent artists",
+        "high energy",
+        "and an all-ages community setting"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S21",
+      "brief": "Plan a weekend festival stage at an outdoor event with a 1,500-person capacity for an audience interested in punk and hardcore. Cultural cues: independent artists, high energy, and an all-ages community setting. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "punk and hardcore",
+        "independent artists",
+        "high energy",
+        "and an all-ages community setting"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S22",
+      "brief": "Plan a ticketed showcase at a 250-person independent venue for an audience interested in chamber music. Cultural cues: small ensembles, contemporary composition, and an attentive audience. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "chamber music",
+        "small ensembles",
+        "contemporary composition",
+        "and an attentive audience"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S23",
+      "brief": "Plan a community concert at a 700-person civic arts venue for an audience interested in chamber music. Cultural cues: small ensembles, contemporary composition, and an attentive audience. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "chamber music",
+        "small ensembles",
+        "contemporary composition",
+        "and an attentive audience"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    },
+    {
+      "id": "S24",
+      "brief": "Plan a weekend festival stage at an outdoor event with a 1,500-person capacity for an audience interested in chamber music. Cultural cues: small ensembles, contemporary composition, and an attentive audience. Suggest culturally relevant artists and potential brand categories; do not infer attendance or purchase intent from taste.",
+      "culturalCues": [
+        "chamber music",
+        "small ensembles",
+        "contemporary composition",
+        "and an attentive audience"
+      ],
+      "qlooEvidenceIds": [],
+      "baseline": {
+        "text": "",
+        "namedEntities": []
+      },
+      "qlooGrounded": {
+        "text": "",
+        "namedEntities": []
+      }
+    }
+  ]
+}

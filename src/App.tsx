@@ -406,6 +406,8 @@ function InputPanel({
   onEventPlanChange,
   sourceUrl,
   onSourceUrlChange,
+  webResearchEnabled,
+  onWebResearchEnabledChange,
   onRun,
   stage,
   selectedScenarioId,
@@ -423,6 +425,8 @@ function InputPanel({
   onEventPlanChange: (plan: EventPlan) => void;
   sourceUrl: string;
   onSourceUrlChange: (url: string) => void;
+  webResearchEnabled: boolean;
+  onWebResearchEnabledChange: (enabled: boolean) => void;
   onRun: () => void;
   stage: PipelineStage;
   selectedScenarioId: string | null;
@@ -537,7 +541,7 @@ function InputPanel({
 
       <div className="mt-4">
         <span className="mb-1.5 block text-[10px] font-medium text-slate-400">
-          Web enrichment URL <span className="font-normal text-slate-600">Optional · Tavily Extract</span>
+          Web enrichment URL <span className="font-normal text-slate-600">Optional · sent to Tavily when provided</span>
         </span>
         <input
           className="h-9 w-full rounded-lg border border-white/[0.08] bg-[#15171d] px-3 text-[11px] text-slate-200 outline-none transition-colors placeholder:text-slate-700 focus:border-blue-500/60"
@@ -547,6 +551,18 @@ function InputPanel({
           onChange={(event) => onSourceUrlChange(event.target.value)}
           placeholder="e.g. https://en.wikipedia.org/wiki/Kind_of_Blue"
         />
+        <label className="mt-2 flex items-start gap-2 text-[9px] leading-relaxed text-slate-400">
+          <input
+            checked={webResearchEnabled}
+            className="mt-0.5 accent-blue-500"
+            onChange={(event) => onWebResearchEnabledChange(event.target.checked)}
+            type="checkbox"
+          />
+          <span>
+            Allow optional public market research via Tavily. This sends cultural tags and entered event/location details
+            as search terms. Off by default.
+          </span>
+        </label>
       </div>
 
       <div className="mt-4 space-y-4">
@@ -690,6 +706,8 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
   });
 
   const maxAffinity = Math.max(...result.evidence.map((e) => e.affinity ?? 0), 0);
+  const formatAffinity = (value: number) =>
+    new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(value);
 
   return (
     <main className="min-h-0 border-b border-white/[0.07] bg-[#0d0e12] p-5 lg:border-r lg:border-b-0 xl:p-6 overflow-y-auto">
@@ -697,7 +715,7 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
         <SectionHeading eyebrow="02 · Cultural evidence" title="Qloo Taste Graph" />
         <div className="flex items-center gap-2">
           <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.06] px-2.5 py-1 text-[9px] text-blue-300">
-            Top affinity score: {maxAffinity}
+            Top affinity signal: {formatAffinity(maxAffinity)}
           </span>
           <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[9px] text-slate-400">
             {result.evidence.length} Matched Artists
@@ -766,21 +784,11 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
               {item.affinity !== null && (
                 <div className="text-right">
                   <span className="inline-block rounded-full border border-blue-400/20 bg-blue-500/10 px-2.5 py-0.5 text-[9px] font-semibold text-blue-300">
-                    Affinity signal: {item.affinity}
+                    Affinity signal: {formatAffinity(item.affinity)}
                   </span>
                 </div>
               )}
             </div>
-
-            {/* Visual Affinity Progress Indicator */}
-            {item.affinity !== null && (
-              <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-400 to-emerald-400"
-                  style={{ width: `${Math.min(item.affinity, 100)}%` }}
-                />
-              </div>
-            )}
 
             {item.description && (
               <p className="mt-2.5 text-[10px] leading-relaxed text-slate-400 line-clamp-2 hover:line-clamp-none">
@@ -835,7 +843,9 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
                     <span className="text-[8px] text-slate-500">{brand.domain.replace('urn:entity:', '')}</span>
                   </div>
                   {brand.affinity !== null && (
-                    <span className="shrink-0 text-[8px] text-violet-200">Affinity signal: {brand.affinity}</span>
+                    <span className="shrink-0 text-[8px] text-violet-200">
+                      Affinity signal: {formatAffinity(brand.affinity)}
+                    </span>
                   )}
                 </div>
                 {brand.description && <p className="mt-1 text-[9px] leading-relaxed text-slate-400">{brand.description}</p>}
@@ -861,8 +871,8 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
       </section>
 
       <p className="mt-5 text-[9px] leading-relaxed text-slate-600 text-center">
-        Affinity is shown on the app&apos;s 0–100 display scale. It is a graph signal—not a probability of attendance,
-        purchase, or an individual&apos;s preferences.
+        Affinity is shown as the raw numeric value returned by Qloo; it is not a probability of attendance, purchase,
+        sponsorship, or an individual&apos;s preferences.
       </p>
     </main>
   );
@@ -1098,6 +1108,7 @@ export default function App() {
   const [tags, setTags] = useState('');
   const [eventPlan, setEventPlan] = useState<EventPlan>(() => eventPlanSchema.parse({}));
   const [sourceUrl, setSourceUrl] = useState('');
+  const [webResearchEnabled, setWebResearchEnabled] = useState(false);
   const [stage, setStage] = useState<PipelineStage>('idle');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SimulationResponse | null>(null);
@@ -1168,8 +1179,9 @@ export default function App() {
     vertical: TargetVertical;
     demoId: string | null;
     eventPlan: EventPlan;
+    webResearchEnabled?: boolean;
   }) => {
-    const current = override ?? { file, tags, sourceUrl, vertical, demoId: selectedScenarioId, eventPlan };
+    const current = override ?? { file, tags, sourceUrl, vertical, demoId: selectedScenarioId, eventPlan, webResearchEnabled };
     const {
       file: runFile,
       tags: runTags,
@@ -1177,6 +1189,7 @@ export default function App() {
       vertical: runVertical,
       demoId,
       eventPlan: runEventPlan,
+      webResearchEnabled: runWebResearchEnabled = false,
     } = current;
     setError(null);
     setResult(null);
@@ -1325,6 +1338,7 @@ export default function App() {
           eventPlan: runEventPlan,
           location: runEventPlan.location || undefined,
           sourceUrl: runUrl.trim() || undefined,
+          enableWebResearch: runWebResearchEnabled,
           uploadPath: uploadedPath ?? undefined,
           fileData: fileDataPayload,
           originalFileName: runFile?.name,
@@ -1378,6 +1392,7 @@ export default function App() {
           tags.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean),
         location,
         eventPlan,
+        enableWebResearch: webResearchEnabled,
       }),
     });
     const payload = await readApiResponse(response, 'Promoter analysis service');
@@ -1425,6 +1440,8 @@ export default function App() {
             detach();
             setSourceUrl(next);
           }}
+          webResearchEnabled={webResearchEnabled}
+          onWebResearchEnabledChange={setWebResearchEnabled}
           onRun={() => void runAnalysis()}
           stage={loadingDemo ? 'uploading' : stage}
           selectedScenarioId={selectedScenarioId}

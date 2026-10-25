@@ -86,7 +86,7 @@ async function getInsights(type: 'artist' | 'brand', tagIds: string[]): Promise<
     id: entity.entity_id,
     name: entity.name,
     domain: entity.subtype ?? `urn:entity:${type}`,
-    affinity: typeof entity.query?.affinity === 'number' ? Math.round(entity.query.affinity * 100) : null,
+    affinity: typeof entity.query?.affinity === 'number' ? entity.query.affinity : null,
     description: entity.properties?.description ?? null,
     explainability: entity.query?.explainability ?? undefined,
   }));

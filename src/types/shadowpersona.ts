@@ -95,7 +95,7 @@ export const qlooEvidenceSchema = z.object({
   id: z.string(),
   name: z.string(),
   domain: z.string(),
-  affinity: z.number().min(0).max(100).nullable(),
+  affinity: z.number().nullable(),
   description: z.string().nullable(),
   explainability: z.record(z.string(), z.unknown()).optional(),
 });
