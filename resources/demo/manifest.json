@@ -46,7 +46,7 @@
     "title": "Midnight Soliloquy (EP)",
     "subtitle": "PDF brief + tags",
     "icon": "🌙",
-    "description": "Intimate bedroom neo-soul EP. Exercises the file-upload path: Gemini reads the PDF, then Qloo maps the taste graph.",
+    "description": "Intimate bedroom neo-soul EP. Exercises the file-upload path: Kimi reads the PDF, then Qloo maps the taste graph.",
     "vertical": "music",
     "tags": "Neo-Soul, Lo-Fi, Downtempo, Analogue Warmth, Chill, Intimate",
     "sourceUrl": "",
@@ -75,6 +75,6 @@
     "tags": "Modal Jazz, Cool Jazz, Instrumental, Classic, Trumpet",
     "sourceUrl": "https://en.wikipedia.org/wiki/Kind_of_Blue",
     "file": "",
-    "rationale": "Runs the full pipeline: Tavily URL extraction, Gemini structuring and Qloo Taste Graph."
+    "rationale": "Runs the full pipeline: Tavily URL extraction, Kimi structuring and Qloo Taste Graph."
   }
 ]

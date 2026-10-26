@@ -15,11 +15,19 @@ const leaseSchema = z.array(z.object({
   retry_after_ms: z.number().int().nonnegative(),
 }));
 
-const maxAnalysisConcurrentRequests = 2;
-const maxAnalysisQueueWaitMs = 45_000;
+const maxAnalysisConcurrentRequests = 1;
+const maxAnalysisQueueWaitMs = 180_000;
 const leasePollMaxMs = 2_000;
 const analysisLeaseSeconds = 300;
 const simulationCacheTtlSeconds = 6 * 60 * 60;
+const maxKimiRequestsPerMinute = 2;
+
+function getKimiRequestsPerMinute(): number | null {
+  const requestsPerMinute = Number(process.env.KIMI_REQUESTS_PER_MINUTE ?? '2');
+  return Number.isInteger(requestsPerMinute) && requestsPerMinute >= 1 && requestsPerMinute <= maxKimiRequestsPerMinute
+    ? requestsPerMinute
+    : null;
+}
 
 export interface SimulationCacheClaim {
   cacheKey: string;
@@ -28,9 +36,8 @@ export interface SimulationCacheClaim {
 
 export async function isAnalysisControlsReady(): Promise<boolean> {
   if (!isSupabaseAdminConfigured()) return false;
-  const requestsPerMinute = Number(process.env.KIMI_REQUESTS_PER_MINUTE ?? '10');
-  if (!Number.isInteger(requestsPerMinute) || requestsPerMinute < 1 || requestsPerMinute > 120) {
-    console.error('Kimi quota controls are not ready: KIMI_REQUESTS_PER_MINUTE is outside 1-120.');
+  if (getKimiRequestsPerMinute() === null) {
+    console.error(`Kimi quota controls are not ready: KIMI_REQUESTS_PER_MINUTE must be between 1 and ${maxKimiRequestsPerMinute}.`);
     return false;
   }
   try {
@@ -121,9 +128,9 @@ export async function releaseSimulationClaim(claim: SimulationCacheClaim): Promi
 }
 
 export async function acquireAnalysisLease(): Promise<() => Promise<void>> {
-  const requestsPerMinute = Number(process.env.KIMI_REQUESTS_PER_MINUTE ?? '10');
-  if (!Number.isInteger(requestsPerMinute) || requestsPerMinute < 1 || requestsPerMinute > 120) {
-    throw new ProviderError('Kimi', 503, 'KIMI_REQUESTS_PER_MINUTE must be an integer from 1 to 120.');
+  const requestsPerMinute = getKimiRequestsPerMinute();
+  if (requestsPerMinute === null) {
+    throw new ProviderError('Kimi', 503, `KIMI_REQUESTS_PER_MINUTE must be an integer from 1 to ${maxKimiRequestsPerMinute}.`);
   }
 
   const startedAt = Date.now();

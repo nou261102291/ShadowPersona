@@ -31,14 +31,14 @@ const kimiStreamChunkSchema = z.object({
 }).passthrough();
 
 const kimiRequestTimeoutMs = 120_000;
-const maxQueuedKimiRequests = 4;
+const maxQueuedKimiRequests = 8;
 
 let kimiRequestQueue: Promise<void> = Promise.resolve();
 let queuedKimiRequests = 0;
 
 async function withKimiRequestQueue<T>(operation: () => Promise<T>): Promise<T> {
   if (queuedKimiRequests >= maxQueuedKimiRequests) {
-    throw new ProviderError('Kimi', 429, 'Kimi is busy processing queued requests. Retry shortly.');
+    throw new ProviderError('Kimi', 503, 'Kimi is busy processing queued requests. Retry shortly.');
   }
 
   queuedKimiRequests++;

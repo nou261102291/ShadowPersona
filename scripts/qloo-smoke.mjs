@@ -1,4 +1,4 @@
-const baseUrl = process.env.QLOO_HACKATHON_API_SERVER_URL || 'https://hackathon.api.qloo.com';
+const baseUrl = 'https://hackathon.api.qloo.com';
 const apiKey = process.env.QLOO_API_KEY;
 
 if (!apiKey || apiKey.startsWith('replace-')) {
@@ -6,25 +6,8 @@ if (!apiKey || apiKey.startsWith('replace-')) {
   process.exit(1);
 }
 
-let parsedBaseUrl;
-try {
-  parsedBaseUrl = new URL(baseUrl);
-} catch {
-  console.error('Qloo smoke test cannot run: QLOO_HACKATHON_API_SERVER_URL is not a valid URL.');
-  process.exit(1);
-}
-
-if (
-  parsedBaseUrl.protocol !== 'https:' ||
-  parsedBaseUrl.hostname !== 'hackathon.api.qloo.com' ||
-  parsedBaseUrl.pathname !== '/'
-) {
-  console.error('Qloo smoke test only sends credentials to https://hackathon.api.qloo.com.');
-  process.exit(1);
-}
-
 async function qlooGet(path, params) {
-  const url = new URL(path, parsedBaseUrl);
+  const url = new URL(path, baseUrl);
   url.search = new URLSearchParams(params).toString();
   let response;
   try {

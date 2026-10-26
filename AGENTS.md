@@ -29,8 +29,9 @@ request/response examples. Never expose provider keys to client-side code.
 Live Kimi K2.6 analysis requires the server-only `KIMI_API_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`, and the latest migration in `supabase/migrations/`
 for shared request admission, duplicate-run suppression, and private result
-caching. Set `KIMI_REQUESTS_PER_MINUTE` within the active Kimi quota; it
-defaults to a conservative 10 requests per minute.
+caching. The shared limiter defaults to one concurrent request and
+`KIMI_REQUESTS_PER_MINUTE=2`, and rejects configured values above 2 to stay
+below the documented Kimi Tier 0 limit.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

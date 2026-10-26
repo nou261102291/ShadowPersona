@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { QlooEvidence } from '@/types/shadowpersona';
 import { fetchWithBackoff, requireEnv } from './http';
 
+const qlooBaseUrl = 'https://hackathon.api.qloo.com';
+
 const tagsSchema = z.object({
   results: z.object({
     tags: z.array(z.object({ id: z.string(), name: z.string() })),
@@ -29,8 +31,7 @@ const insightsSchema = z.object({
 });
 
 async function qlooGet(path: string, params: Record<string, string>) {
-  const base = requireEnv('QLOO_HACKATHON_API_SERVER_URL').replace(/\/$/, '');
-  const url = `${base}${path}?${new URLSearchParams(params)}`;
+  const url = `${qlooBaseUrl}${path}?${new URLSearchParams(params)}`;
   const response = await fetchWithBackoff('Qloo', url, {
     headers: { 'X-Api-Key': requireEnv('QLOO_API_KEY') },
   });

@@ -6,7 +6,7 @@
 
 This guide supersedes the earlier mock-only implementation examples. The original dashboard was a Vite prototype; its UI is now ported to Next.js App Router for Vercel with Supabase. Do not treat the example personas, scores, CAC/LTV values, demo URL, or repository URL in the older blueprint as live product data or deployed resources.
 
-**Build status:** The Next.js App Router workflow includes Qloo artist and brand insights, Gemini-compatible analysis, optional Tavily enrichment, and deterministic event planning. A low-volume live Qloo smoke test using generic jazz tags returned artist and brand entities; the tested response did not include per-entity explainability objects. No recommendation-quality benchmark or independent organizer study has been completed.
+**Build status:** The Next.js App Router workflow includes Qloo artist and brand insights, Kimi K2.6 analysis, optional Tavily enrichment, and deterministic event planning. A low-volume live Qloo smoke test using generic jazz tags returned artist and brand entities; the tested response did not include per-entity explainability objects. No recommendation-quality benchmark or independent organizer study has been completed.
 
 ## 1. Decisions and scope
 
@@ -55,7 +55,7 @@ Browser
   ├─ Upload via short-lived, user-scoped Supabase Storage authorization (with direct fallback)
   └─ Calls authenticated/session-scoped Next.js route handlers
        ├─ Validate input and file signature/size
-       ├─ Extract descriptors with Gemini (or use text-only LM Studio for local analysis)
+       ├─ Extract descriptors with Kimi K2.6
        ├─ Extract and resolve ample cultural descriptors via Qloo hierarchical tags
        ├─ Fetch live Qloo artist and brand insights with explainability enabled
        ├─ Query Tavily extract only for a URL explicitly submitted by the user
@@ -64,7 +64,7 @@ Browser
        └─ Delete temporary source files
 ```
 
-All provider keys remain on the server. No Qloo, Gemini, Tavily, or Supabase service secrets may be exposed in client-side code, browser responses, source control, or logs.
+All provider keys remain on the server. No Qloo, Kimi, Tavily, or Supabase service secrets may be exposed in client-side code, browser responses, source control, or logs.
 
 ### Qloo integration boundary
 
@@ -78,22 +78,15 @@ Implemented as a typed server-side Qloo client in `src/lib/providers/qloo.ts`:
 
 ## 4. Agent and provider responsibilities
 
-### Gemini
+### Kimi
 
 - Extract structured musical and cultural descriptors from user uploads/web text.
 - Produce schema-validated JSON reports strictly grounded in Qloo results.
 - Treat file text and web results as untrusted data, not instructions (`<untrusted>` framing).
-- Primary model: `gemini-3.8-flash`; fallback: `gemini-3.5-flash`.
+- Use `kimi-k2.6` as the only model; there is no secondary provider or fallback.
+- Shared Supabase admission controls limit requests to one concurrent call and at most two requests per minute. Keep `KIMI_REQUESTS_PER_MINUTE` at 1 or 2.
+- The request limit protects this application from exceeding its configured RPM; it does not account for token usage or requests made by other clients using the same Kimi account.
 - Keep Qloo-returned data as the evidence. Clearly label any interpretation or uncertainty.
-
-### Optional local OpenAI-compatible model
-
-- Set `AI_PROVIDER=lm-studio` for local development; leave the default `gemini` for the Gemini API. Despite the legacy variable name, this path supports OpenAI-compatible servers such as LM Studio and Ollama.
-- Set `LM_STUDIO_BASE_URL` to the server base URL and `LM_STUDIO_MODEL_ID` to the exact loaded model ID. The app appends `/v1` if it is not already present.
-- Keep the model server reachable from the machine running Next.js. A local `127.0.0.1` or `localhost` URL works for local development, but a Vercel deployment cannot connect to a developer's computer unless the server is securely reachable there.
-- The configured local model must support vision for image/PDF uploads. Images are sent as OpenAI-compatible data URLs. PDFs are rendered to PNG page images (up to 12 pages, 1400 pixels on the longest edge) before analysis.
-- Local OpenAI-compatible completions use streamed output and a bounded in-process queue so slow Ollama requests do not sit idle behind the tunnel proxy. Timed-out streams are not automatically retried.
-- Optional server authentication belongs in the server-only `LM_STUDIO_API_KEY`; do not use a `NEXT_PUBLIC_` variable.
 
 ### Tavily
 
@@ -107,7 +100,7 @@ Implemented as a typed server-side Qloo client in `src/lib/providers/qloo.ts`:
 
 - First release accepts one PDF, PNG, or JPG up to 10 MB, or one HTTP(S) URL. Do not accept MP4/MP3 in this release.
 - Enforce extension, declared MIME type, actual file signature where supported, and size limits server-side. Reject unsupported or malformed content with a clear user-facing error.
-- For Gemini, send images and PDFs using its supported secure inline data method. For local OpenAI-compatible vision models, send images as data URLs and render PDFs to bounded page images first.
+- Send images through Kimi's supported multimodal chat format and render PDFs to bounded page images before analysis.
 - URLs are research inputs for Tavily. Do not fetch arbitrary user URLs directly from the application server.
 - Delete uploaded originals after processing.
 - Persist only extracted context and report evidence for 30 days.
@@ -125,14 +118,11 @@ Commit `.env.example` with placeholders. Keep `.env.local` ignored and configure
 Expected configuration names:
 
 ```dotenv
-QLOO_HACKATHON_API_SERVER_URL=https://hackathon.api.qloo.com
-QLOO_HACKATHON_API_SERVER_URL=https://hackathon.api.qloo.com
 QLOO_API_KEY=replace-with-qloo-hackathon-key
-GEMINI_API_KEY=replace-with-gemini-api-key
-GEMINI_MODEL_ID=gemini-3.8-flash
-GEMINI_FALLBACK_MODEL_ID=gemini-3.5-flash
-GEMINI_REQUESTS_PER_MINUTE=10
-AI_PROVIDER=gemini
+AI_PROVIDER=kimi
+KIMI_API_KEY=replace-with-kimi-api-key
+KIMI_MODEL_ID=kimi-k2.6
+KIMI_REQUESTS_PER_MINUTE=2
 TAVILY_API_KEY=replace-with-tavily-api-key
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=replace-with-project-anon-key
@@ -140,9 +130,7 @@ NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET=shadowpersona-assets
 SUPABASE_SERVICE_ROLE_KEY=replace-with-service-role-key
 ```
 
-Apply all migrations in `supabase/migrations/`, including the latest quota/cache migration, to the production Supabase project. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only; never prefix it with `NEXT_PUBLIC_`.
-
-For local LM Studio or Ollama testing, set `AI_PROVIDER=lm-studio`, `LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1`, and `LM_STUDIO_MODEL_ID` to the loaded model identifier. For Vercel, use a stable HTTPS OpenAI-compatible endpoint reachable by the deployed serverless functions; localhost and temporary tunnels are not reliable production endpoints. Set `LM_STUDIO_API_KEY` server-side when the model host requires authentication. The model must support vision for image/PDF uploads.
+Apply all migrations in `supabase/migrations/`, including the latest shared admission/cache migration, to the production Supabase project. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only; never prefix it with `NEXT_PUBLIC_`. The Qloo API host is fixed in the server-side client, so `QLOO_HACKATHON_API_SERVER_URL` is not required.
 
 ## 8. Delivery phases
 
@@ -157,7 +145,7 @@ For local LM Studio or Ollama testing, set `AI_PROVIDER=lm-studio`, `LM_STUDIO_B
 ### Phase C — Live Qloo-grounded agent (Completed)
 - Live Qloo hierarchical tag resolution, artist insights, and cross-domain brand discovery.
 - Typed internal cultural-context tool shared by the organizer workflow.
-- Gemini extraction and report generation with exponential backoff and fallback routing.
+- Kimi K2.6 extraction and report generation with bounded retries and no fallback provider.
 - Opt-in Tavily public research, URL extraction, and cited source linking.
 
 ### Phase D — Hackathon readiness (In Progress)
@@ -183,7 +171,7 @@ For local LM Studio or Ollama testing, set `AI_PROVIDER=lm-studio`, `LM_STUDIO_B
 - The real demo never presents fixtures as live Qloo results; missing credentials are visible and actionable.
 - A user cannot read another anonymous session’s saved reports.
 - Uploaded originals are deleted after processing; stored context expires after 30 days and can be deleted earlier.
-- Mistral/Tavily outputs are schema-validated and their errors/rate limits are surfaced.
+- Kimi/Tavily outputs are schema-validated and their errors/rate limits are surfaced.
 - The deployed demo is public, usable without a required sign-in, and available to judges at no charge.
 - Independent organizer review and a completed blinded baseline comparison remain outstanding; do not claim measured lift before collecting these results.
 
@@ -191,6 +179,6 @@ For local LM Studio or Ollama testing, set `AI_PROVIDER=lm-studio`, `LM_STUDIO_B
 
 1. Qloo account/API guide, endpoint access, and a redacted working request/response. Do not send the secret key in chat.
 2. Supabase project URL and anon key for deployment setup; keep secret values in local/hosted secret storage.
-3. Gemini API access, or an OpenAI-compatible server URL and vision-capable loaded model ID for local PDF/image analysis.
+3. Kimi API access for the fixed `kimi-k2.6` model.
 4. Tavily API access if optional web enrichment is to be enabled in the live demo.
 5. Vercel project/team access for deployment and environment-variable setup.

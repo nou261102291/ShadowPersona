@@ -254,13 +254,12 @@ Copy-Item .env.example .env.local
 Open `.env.local` in a local editor and replace the placeholders. Never commit `.env.local`; it is ignored by Git. Do not expose provider keys through `NEXT_PUBLIC_` variables.
 
 ```dotenv
-QLOO_HACKATHON_API_SERVER_URL=https://hackathon.api.qloo.com
 QLOO_API_KEY=your-qloo-hackathon-key
 
 AI_PROVIDER=kimi
 KIMI_API_KEY=your-kimi-api-key
 KIMI_MODEL_ID=kimi-k2.6
-KIMI_REQUESTS_PER_MINUTE=10
+KIMI_REQUESTS_PER_MINUTE=2
 
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
@@ -272,6 +271,8 @@ TAVILY_API_KEY=your-tavily-api-key
 ```
 
 Apply the SQL files in `supabase/migrations/` to the Supabase project in timestamp order. The latest migration is required for shared analysis controls and private result caching. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only; never prefix it with `NEXT_PUBLIC_`.
+
+The Qloo client uses the documented `https://hackathon.api.qloo.com` endpoint directly; only `QLOO_API_KEY` is required. Kimi requests share a Supabase-backed global admission limit, defaulting to 2 requests per minute and one concurrent request to stay below the account's displayed 3-RPM and concurrency-1 limits. Set `KIMI_REQUESTS_PER_MINUTE` to 1 or 2 in local and deployment environments. Per-call output is capped, but the app does not meter cumulative account TPM/TPD or requests from other clients; monitor those quotas in Kimi's usage dashboard.
 
 ### Run locally
 
