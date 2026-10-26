@@ -404,6 +404,8 @@ function InputPanel({
   onTagsChange,
   eventPlan,
   onEventPlanChange,
+  eventPlanOpen,
+  onEventPlanOpenChange,
   sourceUrl,
   onSourceUrlChange,
   webResearchEnabled,
@@ -423,6 +425,8 @@ function InputPanel({
   onTagsChange: (tags: string) => void;
   eventPlan: EventPlan;
   onEventPlanChange: (plan: EventPlan) => void;
+  eventPlanOpen: boolean;
+  onEventPlanOpenChange: (open: boolean) => void;
   sourceUrl: string;
   onSourceUrlChange: (url: string) => void;
   webResearchEnabled: boolean;
@@ -436,6 +440,7 @@ function InputPanel({
 }) {
   const busy = stage !== 'idle';
   const blocked = readiness.some((item) => !item.ok);
+  const ready = !busy && !blocked;
   const activeDemo = DEMO_SCENARIOS.find((sc) => sc.id === selectedScenarioId) ?? DEMO_SCENARIOS[0];
   const buttonText =
     stage === 'uploading'
@@ -447,7 +452,7 @@ function InputPanel({
           : 'Run event analysis';
 
   return (
-    <section className="flex min-h-0 flex-col border-b border-white/[0.07] bg-[#101116] p-5 lg:border-r lg:border-b-0 xl:p-6 overflow-y-auto">
+    <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto border-b border-white/[0.07] bg-[#101116] p-5 lg:border-r lg:border-b-0 xl:p-6">
       <SectionHeading eyebrow="01 · Input framework" title="Launch Brief" />
 
       {/* Guided Live Demo Scenarios */}
@@ -483,6 +488,14 @@ function InputPanel({
             Fill &amp; run demo
           </button>
         </div>
+        {selectedScenarioId && (
+          <p
+            className="mt-2 rounded-md border border-emerald-400/20 bg-emerald-500/[0.06] px-2 py-1.5 text-[9px] leading-relaxed text-emerald-200"
+            role="status"
+          >
+            {activeDemo.title} data is loaded into the form. Review the populated fields below before running.
+          </p>
+        )}
 
         <div className="mt-2.5 space-y-1.5">
           {DEMO_SCENARIOS.map((sc) => {
@@ -632,23 +645,37 @@ function InputPanel({
         </label>
       </div>
 
-      <EventPlanInputs plan={eventPlan} onChange={onEventPlanChange} />
+      <EventPlanInputs
+        plan={eventPlan}
+        onChange={onEventPlanChange}
+        open={eventPlanOpen}
+        onOpenChange={onEventPlanOpenChange}
+      />
 
       <div className="mt-auto pt-6">
         <ul className="mb-3 space-y-1" aria-label="Readiness checklist">
-          {readiness.map((item) => (
-            <li key={item.id} className="text-[10px]">
-              <span className={item.ok ? 'text-emerald-400' : 'text-amber-300'}>{item.ok ? '✓' : '✗'}</span>{' '}
-              <span className="text-slate-300">{item.label}</span>
-              {!item.ok && item.fix && <span className="block pl-4 text-[9px] text-slate-500">{item.fix}</span>}
-            </li>
-          ))}
+          {readiness.map((item) => {
+            const checking = item.id === 'services' && item.label === 'Checking services…';
+            return (
+              <li key={item.id} className="text-[10px]">
+                <span className={item.ok ? 'text-emerald-400' : checking ? 'text-slate-500' : 'text-amber-300'}>
+                  {item.ok ? '✓' : checking ? '…' : '✗'}
+                </span>{' '}
+                <span className="text-slate-300">{item.label}</span>
+                {!item.ok && item.fix && <span className="block pl-4 text-[9px] text-slate-500">{item.fix}</span>}
+              </li>
+            );
+          })}
         </ul>
         <p className="mb-2.5 text-[9px] leading-relaxed text-slate-500">
           Uploads are temporary & destroyed post-analysis. Extracted cultural evidence is retained 30 days.
         </p>
         <button
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-[11px] font-semibold text-white shadow-[0_10px_30px_rgba(37,99,235,0.22)] transition-all hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`flex h-11 w-full items-center justify-center gap-2 rounded-lg text-[11px] font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+            ready
+              ? 'bg-emerald-600 shadow-[0_10px_30px_rgba(16,185,129,0.2)] hover:bg-emerald-500'
+              : 'bg-blue-600 shadow-[0_10px_30px_rgba(37,99,235,0.22)] hover:bg-blue-500'
+          }`}
           disabled={busy || blocked}
           onClick={onRun}
           type="button"
@@ -656,6 +683,9 @@ function InputPanel({
           <Icon name="spark" className={`h-4 w-4 ${busy ? 'animate-pulse' : ''}`} />
           {buttonText}
         </button>
+        <p className="mt-2 text-center text-[9px] text-slate-500">
+          Analysis can take about 90 seconds to generate.
+        </p>
       </div>
     </section>
   );
@@ -708,9 +738,16 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
   const maxAffinity = Math.max(...result.evidence.map((e) => e.affinity ?? 0), 0);
   const formatAffinity = (value: number) =>
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(value);
+  const seenResolvedTags = new Set<string>();
+  const resolvedTags = result.resolvedTags?.filter((tag) => {
+    const normalized = tag.trim().toLowerCase();
+    if (!normalized || seenResolvedTags.has(normalized)) return false;
+    seenResolvedTags.add(normalized);
+    return true;
+  }) ?? [];
 
   return (
-    <main className="min-h-0 border-b border-white/[0.07] bg-[#0d0e12] p-5 lg:border-r lg:border-b-0 xl:p-6 overflow-y-auto">
+    <main className="min-h-0 min-w-0 overflow-y-auto border-b border-white/[0.07] bg-[#0d0e12] p-5 lg:border-r lg:border-b-0 xl:p-6">
       <div className="flex items-end justify-between gap-4">
         <SectionHeading eyebrow="02 · Cultural evidence" title="Qloo Taste Graph" />
         <div className="flex items-center gap-2">
@@ -731,11 +768,11 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
         <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{result.summary}</p>
       </div>
 
-      {result.resolvedTags && result.resolvedTags.length > 0 && (
+      {resolvedTags.length > 0 && (
         <div className="mt-3 rounded-xl border border-white/[0.06] bg-[#13151a] p-3.5">
           <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Interest tags resolved by Qloo</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {result.resolvedTags.map((tag) => (
+            {resolvedTags.map((tag) => (
               <span
                 className="rounded-full border border-blue-400/15 bg-blue-400/[0.05] px-2 py-1 text-[9px] text-blue-200"
                 key={tag}
@@ -977,7 +1014,7 @@ function ReportPanel({
         : 'Generating your analysis report…';
 
   return (
-    <aside aria-busy={isBusy} className="min-h-0 bg-[#101116] p-5 xl:p-6 overflow-y-auto">
+    <aside aria-busy={isBusy} className="min-h-0 min-w-0 overflow-y-auto bg-[#101116] p-5 xl:p-6">
       <div className="flex items-end justify-between">
         <SectionHeading eyebrow="03 · Agent synthesis" title="Analysis Report" />
         {result && (
@@ -1110,6 +1147,7 @@ export default function App() {
   const [sourceUrl, setSourceUrl] = useState('');
   const [webResearchEnabled, setWebResearchEnabled] = useState(false);
   const [stage, setStage] = useState<PipelineStage>('idle');
+  const [eventPlanOpen, setEventPlanOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SimulationResponse | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
@@ -1147,6 +1185,7 @@ export default function App() {
     setTags(scenario.tags);
     const nextEventPlan = scenario.eventPlan ?? eventPlanSchema.parse({});
     setEventPlan(nextEventPlan);
+    setEventPlanOpen(hasEventPlanningInput(nextEventPlan));
     setSourceUrl(scenario.sourceUrl);
     setFile(demoFile);
     setLoadingDemo(false);
@@ -1416,7 +1455,7 @@ export default function App() {
           </button>
         </div>
       )}
-      <div className="grid min-h-[calc(100vh-72px)] grid-cols-1 lg:grid-cols-[28%_44%_28%]">
+      <div className="grid min-h-[calc(100vh-72px)] grid-cols-1 lg:grid-cols-[minmax(0,28fr)_minmax(0,44fr)_minmax(0,28fr)]">
         <InputPanel
           file={file}
           onFileChange={(next) => {
@@ -1435,6 +1474,8 @@ export default function App() {
             detach();
             setEventPlan(next);
           }}
+          eventPlanOpen={eventPlanOpen}
+          onEventPlanOpenChange={setEventPlanOpen}
           sourceUrl={sourceUrl}
           onSourceUrlChange={(next) => {
             detach();

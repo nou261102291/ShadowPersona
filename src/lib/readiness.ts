@@ -59,7 +59,7 @@ export function getReadiness(input: ReadinessInput): ReadinessItem[] {
   }
 
   if (!input.health) {
-    items.push({ id: 'services', label: 'Checking services…', ok: true });
+    items.push({ id: 'services', label: 'Checking services…', ok: false });
   } else if (canReplayDemo(input.demoScenarioId, input.health)) {
     items.push({ id: 'services', label: 'Offline demo: replaying a recorded result', ok: true });
   } else {

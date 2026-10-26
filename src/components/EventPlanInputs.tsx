@@ -64,16 +64,24 @@ function NumberInput({
 export default function EventPlanInputs({
   plan,
   onChange,
+  open,
+  onOpenChange,
 }: {
   plan: EventPlan;
   onChange: (plan: EventPlan) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const set = <K extends keyof EventPlan>(key: K, value: EventPlan[K]) => {
     onChange({ ...plan, [key]: value });
   };
 
   return (
-    <details className="mt-4 rounded-xl border border-violet-400/20 bg-violet-500/[0.035]">
+    <details
+      className="mt-4 rounded-xl border border-violet-400/20 bg-violet-500/[0.035]"
+      open={open}
+      onToggle={(event) => onOpenChange(event.currentTarget.open)}
+    >
       <summary className="cursor-pointer list-none px-3.5 py-3">
         <span className="text-[11px] font-semibold text-slate-200">Event organizer plan</span>
         <span className="ml-2 text-[9px] text-violet-300">culture · audience · economics</span>

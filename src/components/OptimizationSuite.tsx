@@ -44,7 +44,7 @@ export default function OptimizationSuite({ optimizationData }: { optimizationDa
   const degraded = comparisonStatus === 'failed' || comparisonStatus === 'skipped';
 
   return (
-    <section aria-label="Optimization suite" className="space-y-6 rounded-2xl bg-[#0d0e12] p-4 text-slate-200 sm:p-6">
+    <section aria-label="Optimization suite" className="min-w-0 space-y-6 rounded-2xl bg-[#0d0e12] p-4 text-slate-200 sm:p-6">
       {degraded && (
         <div
           role="alert"
@@ -57,8 +57,8 @@ export default function OptimizationSuite({ optimizationData }: { optimizationDa
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="space-y-5 rounded-xl border border-white/[0.07] bg-[#101116] p-5">
+      <div className="grid min-w-0 grid-cols-1 gap-6">
+        <div className="min-w-0 space-y-5 rounded-xl border border-white/[0.07] bg-[#101116] p-5">
           <SectionTitle eyebrow="Phase 01" title="Pre-Event Strategy" />
 
           <div>
@@ -67,7 +67,7 @@ export default function OptimizationSuite({ optimizationData }: { optimizationDa
               {pre.recommendedTicketPricingTiers.map((tier) => (
                 <li
                   key={tier.name}
-                  className="rounded-xl border-2 bg-[#0d0e12] p-4 shadow-[0_0_24px_rgba(37,99,235,0.12)]"
+                  className="min-w-0 break-words rounded-xl border-2 bg-[#0d0e12] p-4 shadow-[0_0_24px_rgba(37,99,235,0.12)]"
                   style={{ borderColor: BRAND_BLUE }}
                 >
                   <p className="text-3xl font-bold tracking-tight text-white">
@@ -116,12 +116,12 @@ export default function OptimizationSuite({ optimizationData }: { optimizationDa
           </div>
         </div>
 
-        <div className="space-y-5 rounded-xl border border-white/[0.07] bg-[#101116] p-5">
+        <div className="min-w-0 space-y-5 rounded-xl border border-white/[0.07] bg-[#101116] p-5">
           <SectionTitle eyebrow="Phase 02" title="Post-Event Capitalization" />
 
           <div className="rounded-xl border border-blue-400/30 bg-gradient-to-br from-blue-500/15 to-transparent p-5 text-center">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-300">Estimated LTV multiplier</p>
-            <p className="mt-1 text-5xl font-bold tracking-tight text-white">
+            <p className="mt-1 break-words text-4xl font-bold tracking-tight text-white sm:text-5xl">
               {post.estimatedLtvMultiplier === null ? 'Not calculated' : (
                 <>
                   {post.estimatedLtvMultiplier.toFixed(1)}
