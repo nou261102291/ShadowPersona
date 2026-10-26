@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { buildPromoterROI } from '@/lib/providers/gemini';
+import { buildPromoterROI } from '@/lib/providers/kimi';
 import { ProviderError } from '@/lib/providers/http';
 import { getArtistInsights, resolveTagIds } from '@/lib/providers/qloo';
 import { createClient } from '@/lib/supabase/server';
@@ -16,7 +16,7 @@ import {
   createSimulationCacheIdentity,
   releaseSimulationClaim,
   type SimulationCacheClaim,
-} from '@/lib/supabase/geminiControls';
+} from '@/lib/supabase/analysisControls';
 import { eventPlanSchema, promoterLocationSchema, promoterROIDataSchema } from '@/types/shadowpersona';
 
 export const maxDuration = 300;

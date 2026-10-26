@@ -24,7 +24,7 @@ export function createAdminClient(): SupabaseClient {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey || serviceRoleKey.startsWith('replace-with')) {
     throw new ProviderError(
-      'Gemini',
+      'Kimi',
       503,
       'Shared analysis controls are not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY.',
     );

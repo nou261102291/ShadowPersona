@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
   comparativeAnalysisSchema,
-  geminiOptimizationSchema,
+  optimizationModelSchema,
   httpUrlSchema,
   promoterLocationSchema,
   type PromoterROIData,
@@ -12,20 +12,14 @@ import {
 } from '@/types/shadowpersona';
 import { COMPARATIVE_ANALYSIS_PROMPT } from '@/lib/prompts/comparativeAnalysis';
 import { hasEventPlanningInput } from '@/lib/eventPlanning';
-import { fetchWithBackoff, ProviderError, requireEnv } from './http';
-import { acquireGeminiLease } from '@/lib/supabase/geminiControls';
+import { fetchWithBackoff, ProviderError } from './http';
+import { acquireAnalysisLease } from '@/lib/supabase/analysisControls';
 import { getAnalysisModelConfig, getAnalysisModelProviderLabel } from './modelConfig';
 import { renderPdfPagesToImages } from './pdfToImages';
 
 type Part = { text: string } | { inlineData: { mimeType: string; data: string } };
 
-const responseSchema = z.object({
-  candidates: z
-    .array(z.object({ content: z.object({ parts: z.array(z.object({ text: z.string().optional() })) }) }))
-    .min(1),
-});
-
-const lmStudioStreamChunkSchema = z.object({
+const kimiStreamChunkSchema = z.object({
   choices: z
     .array(
       z.object({
@@ -36,20 +30,20 @@ const lmStudioStreamChunkSchema = z.object({
   error: z.union([z.string(), z.object({ message: z.string() }).passthrough()]).optional(),
 }).passthrough();
 
-const localRequestTimeoutMs = 240_000;
-const maxQueuedLocalRequests = 4;
+const kimiRequestTimeoutMs = 120_000;
+const maxQueuedKimiRequests = 4;
 
-let localRequestQueue: Promise<void> = Promise.resolve();
-let queuedLocalRequests = 0;
+let kimiRequestQueue: Promise<void> = Promise.resolve();
+let queuedKimiRequests = 0;
 
-async function withLocalRequestQueue<T>(operation: () => Promise<T>): Promise<T> {
-  if (queuedLocalRequests >= maxQueuedLocalRequests) {
-    throw new ProviderError('OpenAI-compatible model', 429, 'The local analysis model is busy. Retry shortly.');
+async function withKimiRequestQueue<T>(operation: () => Promise<T>): Promise<T> {
+  if (queuedKimiRequests >= maxQueuedKimiRequests) {
+    throw new ProviderError('Kimi', 429, 'Kimi is busy processing queued requests. Retry shortly.');
   }
 
-  queuedLocalRequests++;
-  const request = localRequestQueue.then(operation);
-  localRequestQueue = request.then(
+  queuedKimiRequests++;
+  const request = kimiRequestQueue.then(operation);
+  kimiRequestQueue = request.then(
     () => undefined,
     () => undefined,
   );
@@ -57,11 +51,11 @@ async function withLocalRequestQueue<T>(operation: () => Promise<T>): Promise<T>
   try {
     return await request;
   } finally {
-    queuedLocalRequests--;
+    queuedKimiRequests--;
   }
 }
 
-async function readLocalModelStream(response: Response, provider: string): Promise<string> {
+async function readKimiModelStream(response: Response, provider: string): Promise<string> {
   if (!response.body) {
     throw new ProviderError(provider, 502, `${provider} returned an empty response stream.`);
   }
@@ -89,7 +83,7 @@ async function readLocalModelStream(response: Response, provider: string): Promi
       throw new ProviderError(provider, 502, `${provider} returned invalid JSON in its response stream.`);
     }
 
-    const parsedChunk = lmStudioStreamChunkSchema.safeParse(rawChunk);
+    const parsedChunk = kimiStreamChunkSchema.safeParse(rawChunk);
     if (!parsedChunk.success) {
       throw new ProviderError(provider, 502, `${provider} returned an unexpected response stream format.`);
     }
@@ -146,19 +140,15 @@ async function generateJson<T>(
   { schemaRetries = 0, maxOutputTokens = 1024 }: { schemaRetries?: number; maxOutputTokens?: number } = {},
 ): Promise<T> {
   const modelConfig = getAnalysisModelConfig();
-  const models =
-    modelConfig.provider === 'gemini'
-      ? [modelConfig.model, modelConfig.fallbackModel].filter((model): model is string => Boolean(model))
-      : [];
   let correction: Part | undefined;
   let validationMessage = 'The response was not valid JSON.';
-  const providerLabel = modelConfig.provider === 'gemini' ? 'Gemini' : getAnalysisModelProviderLabel();
+  const providerLabel = getAnalysisModelProviderLabel();
 
   for (let schemaAttempt = 0; schemaAttempt <= schemaRetries; schemaAttempt++) {
     const requestParts = correction ? [...parts, correction] : parts;
-    let text: string;
-    if (modelConfig.provider === 'lm-studio') {
-      text = await withLocalRequestQueue(async () => {
+    const text = await withKimiRequestQueue(async () => {
+        const releaseLease = await acquireAnalysisLease();
+        try {
         const response = await fetchWithBackoff(
         providerLabel,
         `${modelConfig.baseUrl}/chat/completions`,
@@ -177,9 +167,9 @@ async function generateJson<T>(
                 content: requestParts.some((part) => !('text' in part))
                   ? requestParts.map((part) =>
                       'text' in part
-                        ? { type: 'text', text: part.text }
+                      ? { type: 'text' as const, text: part.text }
                         : {
-                            type: 'image_url',
+                          type: 'image_url' as const,
                             image_url: {
                               url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
                             },
@@ -189,62 +179,17 @@ async function generateJson<T>(
               },
             ],
             max_tokens: maxOutputTokens,
-            response_format: {
-              type: 'json_schema',
-              json_schema: {
-                name: 'analysis_response',
-                strict: true,
-                schema: z.toJSONSchema(schema, { target: 'draft-07', unrepresentable: 'any' }),
-              },
-            },
+            response_format: { type: 'json_object' },
+            thinking: { type: 'disabled' },
           }),
         },
-        { retries: 0, timeoutMs: localRequestTimeoutMs },
+        { retries: 1, timeoutMs: kimiRequestTimeoutMs },
       );
-        return readLocalModelStream(response, providerLabel);
-      });
-    } else {
-      let response: Response | undefined;
-      for (const [index, model] of models.entries()) {
-        try {
-          response = await fetchWithBackoff(
-            'Gemini',
-            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': requireEnv('GEMINI_API_KEY') },
-              body: JSON.stringify({
-                contents: [{ parts: requestParts }],
-                generationConfig: { responseMimeType: 'application/json', maxOutputTokens },
-              }),
-            },
-            {
-              retries: index === models.length - 1 ? 3 : 1,
-              acquireRequest: acquireGeminiLease,
-            },
-          );
-          break;
-        } catch (error) {
-          const transient =
-            error instanceof ProviderError &&
-            (error.status >= 500 || (error.status === 429 && !error.options.hardQuota && !error.options.retryAfterMs));
-          if (!transient || index === models.length - 1) throw error;
+        return await readKimiModelStream(response, providerLabel);
+        } finally {
+          await releaseLease();
         }
-      }
-      if (!response) throw new ProviderError('Gemini', 502, 'No Gemini model is configured.');
-
-      let rawResponse: unknown;
-      try {
-        rawResponse = await response.json();
-      } catch {
-        throw new ProviderError('Gemini', 502, 'Gemini returned an unreadable response.');
-      }
-      const parsedResponse = responseSchema.safeParse(rawResponse);
-      if (!parsedResponse.success) {
-        throw new ProviderError('Gemini', 502, 'Gemini returned a response in an unexpected format.');
-      }
-      text = parsedResponse.data.candidates[0].content.parts.map((part) => part.text ?? '').join('');
-    }
+      });
 
     let output: unknown;
     try {
@@ -315,8 +260,7 @@ export async function extractTags(input: {
     },
   ];
   if (input.file) {
-    const modelConfig = getAnalysisModelConfig();
-    if (modelConfig.provider === 'lm-studio' && input.file.mimeType === 'application/pdf') {
+    if (input.file.mimeType === 'application/pdf') {
       const pages = await renderPdfPagesToImages(input.file.base64);
       parts.push(...pages.map((data) => ({ inlineData: { mimeType: 'image/png', data } })));
     } else {
@@ -356,7 +300,7 @@ export async function optimizeEvent(input: {
   evidence: QlooEvidence[];
   historicalContext: string;
   eventPlan?: EventPlan;
-}): Promise<z.infer<typeof geminiOptimizationSchema>> {
+}): Promise<z.infer<typeof optimizationModelSchema>> {
   const organizerWorkflow = input.eventPlan ? hasEventPlanningInput(input.eventPlan) : false;
   const prompt = `You are an event-operations optimization analyst. ${untrustedNotice}
 Using ONLY the Qloo evidence, organizer event brief, and the historical context below, recommend pre-event and post-event optimizations for this event.
@@ -382,7 +326,7 @@ Qloo evidence: ${JSON.stringify(compactEvidence(input.evidence))}
 <CompactedHistoricalContext>
 <untrusted>${input.historicalContext.slice(0, 4000) || 'none'}</untrusted>
 </CompactedHistoricalContext>`;
-  const generated = await generateJson([{ text: prompt }], geminiOptimizationSchema, { maxOutputTokens: 700 });
+  const generated = await generateJson([{ text: prompt }], optimizationModelSchema, { maxOutputTokens: 700 });
   if (!organizerWorkflow || !input.eventPlan) return generated;
 
   const enteredPrices = [

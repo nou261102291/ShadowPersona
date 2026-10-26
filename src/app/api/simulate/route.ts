@@ -9,9 +9,9 @@ import {
   createSimulationCacheIdentity,
   releaseSimulationClaim,
   type SimulationCacheClaim,
-} from '@/lib/supabase/geminiControls';
+} from '@/lib/supabase/analysisControls';
 import { createClient } from '@/lib/supabase/server';
-import { buildPromoterROI, compareEvent, extractTags, optimizeEvent, writeReport } from '@/lib/providers/gemini';
+import { buildPromoterROI, compareEvent, extractTags, optimizeEvent, writeReport } from '@/lib/providers/kimi';
 import { ProviderError } from '@/lib/providers/http';
 import { getCulturalContext } from '@/lib/agent/culturalContext';
 import { providerStatus, readFixture, recordFixture } from '@/lib/demoServer';

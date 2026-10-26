@@ -26,11 +26,11 @@ Do not invent Qloo endpoints or response formats. Implement the Qloo integration
 only against the account's current developer documentation and verified
 request/response examples. Never expose provider keys to client-side code.
 
-Live Gemini analysis also requires the server-only `SUPABASE_SERVICE_ROLE_KEY`
-and the latest migration in `supabase/migrations/` for shared request admission,
-duplicate-run suppression, and private result caching. Set
-`GEMINI_REQUESTS_PER_MINUTE` to a value within the project's active Gemini
-quota; it defaults to a conservative 10 requests per minute.
+Live Kimi K2.6 analysis requires the server-only `KIMI_API_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, and the latest migration in `supabase/migrations/`
+for shared request admission, duplicate-run suppression, and private result
+caching. Set `KIMI_REQUESTS_PER_MINUTE` within the active Kimi quota; it
+defaults to a conservative 10 requests per minute.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

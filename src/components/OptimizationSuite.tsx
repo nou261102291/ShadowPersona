@@ -192,9 +192,9 @@ export default function OptimizationSuite({ optimizationData }: { optimizationDa
       </div>
 
       <div className="rounded-xl border bg-[#101116] p-5" style={{ borderColor: PANEL_BORDER }}>
-        <h2 className="text-sm font-semibold text-slate-100">How Gemini Reasoning Enhances Operational Outcomes</h2>
+        <h2 className="text-sm font-semibold text-slate-100">How Kimi Reasoning Enhances Operational Outcomes</h2>
         <p className="mt-1 text-[11px] text-slate-500">
-          Gemini turns the Qloo taste evidence and live market references into the pricing, channel and partnership
+          Kimi turns the Qloo taste evidence and live market references into the pricing, channel and partnership
           recommendations above, and states where its confidence is limited.
         </p>
         <p

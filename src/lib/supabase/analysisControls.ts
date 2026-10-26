@@ -15,10 +15,10 @@ const leaseSchema = z.array(z.object({
   retry_after_ms: z.number().int().nonnegative(),
 }));
 
-const maxGeminiConcurrentRequests = 2;
-const maxGeminiQueueWaitMs = 45_000;
+const maxAnalysisConcurrentRequests = 2;
+const maxAnalysisQueueWaitMs = 45_000;
 const leasePollMaxMs = 2_000;
-const geminiLeaseSeconds = 90;
+const analysisLeaseSeconds = 300;
 const simulationCacheTtlSeconds = 6 * 60 * 60;
 
 export interface SimulationCacheClaim {
@@ -26,22 +26,22 @@ export interface SimulationCacheClaim {
   ownerKey: string;
 }
 
-export async function isGeminiControlsReady(): Promise<boolean> {
+export async function isAnalysisControlsReady(): Promise<boolean> {
   if (!isSupabaseAdminConfigured()) return false;
-  const requestsPerMinute = Number(process.env.GEMINI_REQUESTS_PER_MINUTE ?? '10');
+  const requestsPerMinute = Number(process.env.KIMI_REQUESTS_PER_MINUTE ?? '10');
   if (!Number.isInteger(requestsPerMinute) || requestsPerMinute < 1 || requestsPerMinute > 120) {
-    console.error('Gemini quota controls are not ready: GEMINI_REQUESTS_PER_MINUTE is outside 1-120.');
+    console.error('Kimi quota controls are not ready: KIMI_REQUESTS_PER_MINUTE is outside 1-120.');
     return false;
   }
   try {
     const { data, error } = await createAdminClient().rpc('shadowpersona_gemini_controls_ready');
     if (error) {
-      console.error('Gemini quota controls are not ready.', error.message);
+      console.error('Kimi quota controls are not ready.', error.message);
       return false;
     }
     return data === true;
   } catch (error) {
-    console.error('Gemini quota controls health check failed.', error instanceof Error ? error.message : 'unknown error');
+    console.error('Kimi quota controls health check failed.', error instanceof Error ? error.message : 'unknown error');
     return false;
   }
 }
@@ -55,9 +55,9 @@ export function createSimulationCacheIdentity(ownerId: string, input: unknown): 
 }
 
 function controlError(operation: string, detail: string): ProviderError {
-  console.error(`Supabase Gemini control failed (${operation}).`, detail);
+  console.error(`Supabase Kimi control failed (${operation}).`, detail);
   return new ProviderError(
-    'Gemini',
+    'Kimi',
     503,
     'Shared analysis controls are unavailable. Apply the latest Supabase migration and verify the server role key.',
   );
@@ -120,25 +120,25 @@ export async function releaseSimulationClaim(claim: SimulationCacheClaim): Promi
   }
 }
 
-export async function acquireGeminiLease(): Promise<() => Promise<void>> {
-  const requestsPerMinute = Number(process.env.GEMINI_REQUESTS_PER_MINUTE ?? '10');
+export async function acquireAnalysisLease(): Promise<() => Promise<void>> {
+  const requestsPerMinute = Number(process.env.KIMI_REQUESTS_PER_MINUTE ?? '10');
   if (!Number.isInteger(requestsPerMinute) || requestsPerMinute < 1 || requestsPerMinute > 120) {
-    throw new ProviderError('Gemini', 503, 'GEMINI_REQUESTS_PER_MINUTE must be an integer from 1 to 120.');
+    throw new ProviderError('Kimi', 503, 'KIMI_REQUESTS_PER_MINUTE must be an integer from 1 to 120.');
   }
 
   const startedAt = Date.now();
   let leaseId: string | undefined;
-  while (Date.now() - startedAt < maxGeminiQueueWaitMs) {
+  while (Date.now() - startedAt < maxAnalysisQueueWaitMs) {
     const { data, error } = await createAdminClient().rpc('acquire_shadowpersona_gemini_lease', {
-      p_max_active: maxGeminiConcurrentRequests,
+      p_max_active: maxAnalysisConcurrentRequests,
       p_min_spacing_ms: Math.ceil(60_000 / requestsPerMinute),
-      p_lease_seconds: geminiLeaseSeconds,
+      p_lease_seconds: analysisLeaseSeconds,
     });
-    if (error) throw controlError('acquire Gemini lease', error.message);
+    if (error) throw controlError('acquire Kimi lease', error.message);
 
     const parsed = leaseSchema.safeParse(data);
     if (!parsed.success || !parsed.data[0]) {
-      throw controlError('acquire Gemini lease response', 'Unexpected database response.');
+      throw controlError('acquire Kimi lease response', 'Unexpected database response.');
     }
     const lease = parsed.data[0];
     if (lease.acquired && lease.lease_id) {
@@ -152,7 +152,7 @@ export async function acquireGeminiLease(): Promise<() => Promise<void>> {
   }
 
   if (!leaseId) {
-    throw new ProviderError('Gemini', 503, 'Gemini is busy processing queued requests. Retry shortly.');
+    throw new ProviderError('Kimi', 503, 'Kimi is busy processing queued requests. Retry shortly.');
   }
 
   return async () => {
@@ -160,9 +160,9 @@ export async function acquireGeminiLease(): Promise<() => Promise<void>> {
       const { error } = await createAdminClient().rpc('release_shadowpersona_gemini_lease', {
         p_lease_id: leaseId,
       });
-      if (error) console.error('Could not release Gemini request lease.', error.message);
+      if (error) console.error('Could not release Kimi request lease.', error.message);
     } catch (error) {
-      console.error('Could not release Gemini request lease.', error instanceof Error ? error.message : 'unknown error');
+      console.error('Could not release Kimi request lease.', error instanceof Error ? error.message : 'unknown error');
     }
   };
 }

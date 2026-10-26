@@ -152,7 +152,7 @@ function Header({ stage, health }: { stage: PipelineStage; health: HealthStatus 
   const steps = [
     { label: 'Brief input', active: stage === 'uploading' },
     { label: 'Qloo Taste Graph', active: stage === 'mapping' || stage === 'analyzing' },
-    { label: 'Gemini synthesis', active: stage === 'analyzing' },
+    { label: 'Kimi synthesis', active: stage === 'analyzing' },
   ];
 
   return (
@@ -667,7 +667,7 @@ function EvidencePanel({ result, health }: { result: SimulationResponse | null; 
   if (!result) {
     const serviceStatus = health
       ? health.live
-        ? 'Live Qloo & Gemini analysis ready'
+        ? 'Live Qloo & Kimi analysis ready'
         : 'Live analysis setup required'
       : 'Checking service readiness…';
     const serviceStatusClass = health?.live
@@ -1018,7 +1018,7 @@ function ReportPanel({
             <div>
               <p className="text-[10px] font-semibold text-blue-200">{progressMessage}</p>
               <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
-                Waiting for live Qloo, Tavily, and Gemini responses.
+                Waiting for live Qloo, Tavily, and Kimi responses.
               </p>
             </div>
           </div>
@@ -1094,7 +1094,7 @@ function ReportPanel({
           </div>
           <p className="mt-4 text-[11px] font-medium text-slate-400">No report generated yet</p>
           <p className="mt-1.5 max-w-[220px] text-[9px] leading-relaxed text-slate-600">
-            Trigger a live scenario or upload a brief to view Gemini AI synthesis grounded in Qloo data.
+            Trigger a live scenario or upload a brief to view Kimi AI synthesis grounded in Qloo data.
           </p>
         </div>
       )}

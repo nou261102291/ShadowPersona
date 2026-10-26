@@ -67,7 +67,7 @@ export default function PromoterROIUnavailable({ canGenerate, onGenerate }: Prom
         </div>
         {!canGenerate && (
           <p className="mt-2 text-[10px] text-amber-200/80">
-            Live Qloo and Gemini services must be configured before fresh models can be generated.
+            Live Qloo and Kimi services must be configured before fresh models can be generated.
           </p>
         )}
         {error && (

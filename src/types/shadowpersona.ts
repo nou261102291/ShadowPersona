@@ -114,7 +114,7 @@ export const competitiveBenchmarkSchema = z.object({
   snippet: z.string(),
 });
 
-export const geminiOptimizationSchema = z.object({
+export const optimizationModelSchema = z.object({
   preEventOptimization: z.object({
     recommendedTicketPricingTiers: z
       .array(z.object({ name: z.string(), price: z.number().nonnegative().nullable(), note: z.string().optional() }))
@@ -134,7 +134,7 @@ export const geminiOptimizationSchema = z.object({
   geminiRationale: z.string(),
 });
 
-export const optimizationDataSchema = geminiOptimizationSchema.extend({
+export const optimizationDataSchema = optimizationModelSchema.extend({
   competitiveBenchmarks: z.array(competitiveBenchmarkSchema),
   comparisonStatus: z.enum(['complete', 'failed', 'skipped']),
 });

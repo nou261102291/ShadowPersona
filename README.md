@@ -36,10 +36,12 @@ Qloo describes its Taste AI as connecting cultural interests across domains with
 | Web application | Next.js App Router, React, and TypeScript |
 | Request and response validation | Zod schemas at API boundaries |
 | Cultural evidence | Server-side Qloo Hackathon API client |
-| Analysis model | Gemini by default; optional OpenAI-compatible LM Studio/Ollama endpoint |
+| Analysis model | Kimi API with the fixed `kimi-k2.6` model |
 | Optional web context | User-submitted URL extraction through Tavily; public market research is opt-in and off by default |
 | Persistence and controls | Supabase Postgres, private Storage, session isolation, shared model admission controls, and duplicate-run/result caching |
 | Deployment target | Vercel-compatible Next.js application |
+
+All generated analysis uses the fixed `kimi-k2.6` model through Kimi's API. JSON-mode responses are checked against the app's Zod schemas, image uploads use Kimi's multimodal chat format, and PDFs are rendered into up to 12 page images. Thinking mode is disabled for these short, schema-constrained tasks to reduce extra token use and latency. Qloo and optional Tavily remain evidence/data providers, not alternate model providers.
 
 The current implementation uses lightweight Next.js route-handler orchestration; it does **not** depend on LangChain, AutoGen, or a separate vector database. Qloo’s API provides the cultural graph and evidence, so local vector storage is not needed for the shipped flow.
 
@@ -93,7 +95,7 @@ Qloo’s hackathon materials describe a graph of more than 250 million entities.
 
 | Use case | What the organizer can do now | Evidence and guardrail |
 | --- | --- | --- |
-| **Concert, tour, or festival planning** | Upload a brief or enter music and mood cues; inspect Qloo-matched artists; build low/expected/high scenarios from editable local-reach, conversion, ticket, sponsor, and cost assumptions. | Artist matches are Qloo entities. Attendance and financial results are deterministic calculations from organizer inputs, not predictions from Qloo or Gemini. |
+| **Concert, tour, or festival planning** | Upload a brief or enter music and mood cues; inspect Qloo-matched artists; build low/expected/high scenarios from editable local-reach, conversion, ticket, sponsor, and cost assumptions. | Artist matches are Qloo entities. Attendance and financial results are deterministic calculations from organizer inputs, not predictions from Qloo or Kimi. |
 | **Culturally aligned partner discovery** | Use the same event tags to surface Qloo brand entities that may be useful starting points for partnership research. | The list is not a sponsor recommendation or local availability check. Verify each brand, local presence, audience fit, and commercial relationship independently. |
 | **Event brief review** | Compare the tags extracted from an event brief with the tags resolved by Qloo, then review the returned evidence before acting. | Model-written explanations are interpretation; the graph entities and organizer assumptions remain separate evidence types. |
 
@@ -157,7 +159,7 @@ The repository does not yet publish a benchmark result for these measures; repor
 - pnpm **10.34.3**
 - A Qloo Hackathon API key
 - A Supabase project with the migrations in `supabase/migrations/` applied
-- A Gemini API key for the default analysis provider
+- A Kimi API key for `kimi-k2.6`
 - Optional: a Tavily API key for URL extraction and public web research
 
 Qloo’s developer guide and hackathon key instructions are linked from the [Qloo Agentic Hackathon](https://qloo.devpost.com/).
@@ -255,11 +257,10 @@ Open `.env.local` in a local editor and replace the placeholders. Never commit `
 QLOO_HACKATHON_API_SERVER_URL=https://hackathon.api.qloo.com
 QLOO_API_KEY=your-qloo-hackathon-key
 
-AI_PROVIDER=gemini
-GEMINI_API_KEY=your-gemini-api-key
-GEMINI_MODEL_ID=gemini-3.8-flash
-GEMINI_FALLBACK_MODEL_ID=gemini-3.5-flash
-GEMINI_REQUESTS_PER_MINUTE=10
+AI_PROVIDER=kimi
+KIMI_API_KEY=your-kimi-api-key
+KIMI_MODEL_ID=kimi-k2.6
+KIMI_REQUESTS_PER_MINUTE=10
 
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
@@ -280,10 +281,6 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000). Use the built-in demo scenarios, add cultural tags, or submit a supported brief. Live analysis requires the provider credentials and Supabase configuration above; the health endpoint reports configuration status without returning secret values.
 
-### Optional local model
-
-For a local OpenAI-compatible LM Studio or Ollama server, set `AI_PROVIDER=lm-studio`, `LM_STUDIO_BASE_URL`, and `LM_STUDIO_MODEL_ID` in `.env.local`. Image and PDF analysis requires a vision-capable model. For a hosted deployment, the model endpoint must be reachable over HTTPS by the server; a developer’s `localhost` is not reachable from Vercel.
-
 ### Checks
 
 ```powershell
@@ -295,6 +292,8 @@ pnpm build
 ## Deployment
 
 Deploy the Next.js application to Vercel or another compatible host. Configure the same server-side provider keys in the host’s encrypted environment settings, configure the public Supabase URL and anon key, apply all Supabase migrations, and verify the health endpoint and a live end-to-end analysis before sharing the deployment. The hackathon requires a publicly accessible, functional demo; a local-only run is not sufficient for submission. See the [official submission requirements](https://qloo.devpost.com/rules).
+
+The app intentionally has no model fallback: every generated analysis uses `kimi-k2.6`. Kimi's current model documentation lists K2-series retirement by the end of December 2026; review the model list before that date if this deployment is intended to remain live.
 
 ## License
 
